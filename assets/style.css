@@ -1,0 +1,9 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Poppins:wght@400;600;800&display=swap');
+:root{--bg:#0A0C11;--glass:#0F131Ccc;--accent:#00E3B2;--gold:#E7B622;--text:#EAF2FF;--muted:#8FA2B8;}
+html,body,[data-testid="stAppViewContainer"]{background:radial-gradient(1000px 600px at 10% 10%, rgba(0,227,178,0.05), transparent 60%),radial-gradient(900px 700px at 90% 10%, rgba(231,182,34,0.06), transparent 60%),var(--bg)!important;color:var(--text)!important;font-family:'Poppins','Montserrat',system-ui;}
+.hero{text-align:center;padding:30px 10px 8px}.hero .logo{width:128px;filter:drop-shadow(0 0 18px rgba(0,227,178,0.35))}.hero h1{margin:10px 0 0;font-weight:800;color:var(--gold)}.hero h2{margin:0;font-weight:700;color:var(--text);opacity:.96}.hero p{color:var(--muted)}
+.card{padding:16px;border-radius:16px;margin:14px 0;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(15,19,28,.78),rgba(15,19,28,.5));backdrop-filter:blur(8px);box-shadow:0 2px 24px rgba(0,0,0,.38),inset 0 0 0 1px rgba(255,255,255,.05)}
+.center{text-align:center}
+.stButton>button{border-radius:12px;border:1px solid rgba(0,227,178,.35)!important;box-shadow:0 0 12px rgba(0,227,178,.22)!important;background:linear-gradient(180deg,rgba(0,227,178,.22),rgba(0,227,178,.08));color:var(--text)}
+[data-testid="stDataFrame"]{border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
