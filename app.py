@@ -14,7 +14,7 @@ from utils import ingest
 
 st.set_page_config(page_title="Sovereign Stash – Crypto Portfolio Navigator", page_icon="🛰️", layout="wide")
 
-# -------- OpenAI (v1 client) --------
+# ===== OpenAI (v1 client) =====
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
 try:
     from openai import OpenAI
@@ -22,7 +22,7 @@ try:
 except Exception:
     client = None
 
-# -------- Data & profile constants --------
+# ===== Data constants =====
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 STABLECOIN_IDS = {"tether","usd-coin","binance-usd","dai","true-usd","usdd","frax"}
 STABLECOIN_SYMBOL_HINTS = {"USDT":"tether","USDC":"usd-coin","BUSD":"binance-usd","DAI":"dai","TUSD":"true-usd"}
@@ -30,7 +30,6 @@ FOLD_TO_BASE = {
     "wbtc":"bitcoin","btc.b":"bitcoin",
     "weth":"ethereum","steth":"ethereum","reth":"ethereum","cbeth":"ethereum","frxeth":"ethereum"
 }
-# Prefer canonical CoinGecko IDs for common symbols (fixes BTC/ETH/etc.)
 PREFERRED_COINS = {
     "btc":"bitcoin","xbt":"bitcoin","bitcoin":"bitcoin",
     "eth":"ethereum","ethereum":"ethereum",
@@ -49,78 +48,95 @@ DISCLAIMER_SHORT = (
     "Crypto assets are volatile and you can lose money."
 )
 
-# -------- Styling (lighter theme + readable buttons + uniform fonts) --------
-def inject_styles():
-    # Load external CSS if present
-    try:
-        with open("assets/style.css","r",encoding="utf-8") as f:
-            st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except Exception:
-        pass
+# ===== Theme system (Dark / Light with green accents) =====
+def set_plotly_theme(theme: str):
+    if theme == "Dark":
+        pio.templates["ss_dark"] = go.layout.Template(
+            layout=go.Layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#0b1220",
+                font=dict(color="#EAF2FF"),
+                colorway=["#10b981", "#eab308", "#22a2ee", "#9333ea", "#64748b"],
+                xaxis=dict(gridcolor="#1f2a44"),
+                yaxis=dict(gridcolor="#1f2a44"),
+            )
+        )
+        pio.templates.default = "ss_dark"
+        px.defaults.template = "plotly_dark"
+    else:
+        pio.templates["ss_light"] = go.layout.Template(
+            layout=go.Layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#ffffff",
+                font=dict(color="#0f172a"),
+                colorway=["#10b981", "#0ea5e9", "#eab308", "#9333ea", "#64748b"],
+                xaxis=dict(gridcolor="#e5e7eb"),
+                yaxis=dict(gridcolor="#e5e7eb"),
+            )
+        )
+        pio.templates.default = "ss_light+plotly_white"
+        px.defaults.template = "plotly_white"
 
-    # Uniform typography + improved buttons + headings
-    st.markdown("""
+def inject_css(theme: str):
+    if theme == "Dark":
+        bg = "#0f172a"; text = "#EAF2FF"; muted = "#9ab0c5"
+        card_bg = "linear-gradient(180deg, rgba(13,20,29,0.92), rgba(13,20,29,0.72))"
+        border = "rgba(255,255,255,0.10)"
+        btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#0b1220"
+        accent = "#10b981"
+    else:
+        bg = "#f7fafc"; text = "#0f172a"; muted = "#475569"
+        card_bg = "#ffffff"
+        border = "rgba(15,23,42,0.10)"
+        btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#ffffff"
+        accent = "#10b981"
+
+    st.markdown(f"""
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
-      html, body, [data-testid="stAppViewContainer"]{
+      html, body, [data-testid="stAppViewContainer"] {{
+        background: {bg};
+        color: {text};
         font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        background: #0f172a;  /* lighter navy */
-      }
-      /* Cards */
-      .card{
-        background: linear-gradient(180deg, rgba(18,26,40,0.88), rgba(18,26,40,0.65));
-        border: 1px solid rgba(255,255,255,.10);
+      }}
+      .hero {{ text-align:center; padding: 22px 10px 10px; }}
+      .hero h1 {{ font-size: 38px; font-weight: 800; margin: 8px 0 0; }}
+      .hero h2 {{ font-size: 22px; font-weight: 700; margin: 0; opacity: .95; }}
+      .hero p {{ color: {muted}; }}
+
+      .card {{
+        background: {card_bg};
+        border: 1px solid {border};
         border-radius: 16px; padding: 18px; margin: 14px 0;
-      }
-      /* Headings */
-      h1, h2, .stMarkdown h2, .stMarkdown h3{
-        color: #e2e8f0;
-      }
-      .hero h1 { font-size: 38px; font-weight: 800; margin: 8px 0 0; }
-      .hero h2 { font-size: 22px; font-weight: 700; opacity: .95; margin: 0; }
-      .stMarkdown h2 { font-size: 22px; font-weight: 700; }
-      .stMarkdown h3 { font-size: 18px; font-weight: 600; }
+      }}
+
+      h1, h2, .stMarkdown h2, .stMarkdown h3 {{ color: {text}; }}
+      .stMarkdown h2 {{ font-size: 22px; font-weight: 700; }}
+      .stMarkdown h3 {{ font-size: 18px; font-weight: 600; }}
+
       /* Buttons (action + download) */
-      .stButton>button, .stDownloadButton>button{
-        background: #0ea5e9 !important; /* sky-500 */
-        color: #ffffff !important;
+      .stButton>button, .stDownloadButton>button {{
+        background: {btn_bg} !important;
+        color: {btn_text} !important;
         border: 0 !important;
         border-radius: 12px !important;
         padding: 10px 14px !important;
         font-weight: 700 !important;
-        box-shadow: 0 6px 16px rgba(14,165,233,0.35) !important;
-      }
-      .stButton>button:hover, .stDownloadButton>button:hover{
-        background: #0284c7 !important; /* sky-600 */
-      }
-      /* File uploader label */
-      label[for^="stFileUpload"] { color: #e2e8f0 !important; font-weight: 600; }
-      /* Dataframe chrome */
-      [data-testid="stDataFrame"]{
-        border-radius: 12px; overflow: hidden;
-        border:1px solid rgba(255,255,255,0.10);
-      }
-      .hero{ text-align: center; padding: 36px 10px 16px; }
-      .hero .logo{ width: 120px; filter: drop-shadow(0 0 14px rgba(14,165,233,0.45)); }
-      .hero p { color: #93a3b8; }
+        box-shadow: 0 6px 16px rgba(16,185,129,0.30) !important;
+      }}
+      .stButton>button:hover, .stDownloadButton>button:hover {{
+        background: {btn_bg_hover} !important;
+      }}
+      label[for^="stFileUpload"] {{ font-weight: 600; }}
+      [data-testid="stDataFrame"] {{
+        border-radius: 12px; overflow: hidden; border:1px solid {border};
+      }}
+      .accent-left {{ border-left:4px solid {accent}; }}
+      .pill {{ display:inline-block; padding:3px 10px; border-radius:999px; background:{accent}; color:#0b1220; font-weight:700; }}
     </style>
     """, unsafe_allow_html=True)
 
-def set_plotly_theme():
-    pio.templates["ss_light"] = go.layout.Template(
-        layout=go.Layout(
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="#ffffff",
-            font=dict(color="#0f172a"),
-            colorway=["#10b981", "#eab308", "#2563eb", "#9333ea", "#64748b"],
-            xaxis=dict(gridcolor="#e5e7eb"),
-            yaxis=dict(gridcolor="#e5e7eb"),
-        )
-    )
-    px.defaults.template = "plotly_white"
-    pio.templates.default = "ss_light+plotly_white"
-
-# -------- Market data helpers --------
+# ===== Market data helpers =====
 @st.cache_data(ttl=3600)
 def fetch_coin_list():
     r = requests.get(f"{COINGECKO_BASE}/coins/list", timeout=25)
@@ -168,9 +184,8 @@ def fetch_market_data(ids: List[str]):
         out.extend(r.json())
     return out
 
-# -------- Scoring (internally 'risk_score') & insights --------
+# ===== Profile scoring & insights =====
 def calculate_profile_score(df: pd.DataFrame):
-    """Return (score, components) where score=0..100. Internally uses 'risk' semantics, but UI calls it 'profile'."""
     total = df["value_usd"].sum()
     if total <= 0: return 0.0, {}
     key_col = "folded_id" if "folded_id" in df.columns else "id"
@@ -212,7 +227,7 @@ def portfolio_insights(df_display: pd.DataFrame, comps: Dict) -> str:
     return "• " + "\n• ".join(lines)
 
 def generate_ai_summary(metrics: Dict, top_assets: List[Tuple[str,float]]) -> str:
-    """Robust summary: uses OpenAI if available; gracefully falls back on rule-based text."""
+    # robust fallback (shown if no key or API unavailable)
     fallback = [
         f"Profile Score: {metrics.get('risk_score','N/A')} / 100",
         f"BTC+ETH: {metrics.get('btc_eth_pct','N/A')}%",
@@ -268,7 +283,7 @@ def profile_gauge(score: float):
     fig.update_layout(height=300, margin=dict(l=10,r=10,t=30,b=10))
     return fig
 
-# -------- Reporting (PDF) --------
+# ===== Reporting (PDF) =====
 from io import BytesIO
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
@@ -306,7 +321,7 @@ def build_pdf_report(total_value, profile_score, pf_type, comps_out, ai_summary,
     story += [Paragraph("<font size=9>"+DISCLAIMER_SHORT+"</font>", styles['Normal'])]
     doc.build(story); pdf = buf.getvalue(); buf.close(); return pdf
 
-# ========= SESSION UTILITIES =========
+# ===== Session utilities =====
 def compute_inputs_hash(text: str, imported_rows: List[Tuple[str,float]], fold: bool) -> str:
     payload = json.dumps({"text": text.strip(), "imported": imported_rows, "fold": fold}, sort_keys=True)
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
@@ -338,7 +353,7 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
     df_display = df[["symbol","name","quantity","price_usd","value_usd","pct_portfolio","price_change_percentage_24h"]].sort_values("value_usd", ascending=False)
     profile_score, comps = calculate_profile_score(df)
     comps_out = {
-        "risk_score": round(profile_score,2),  # keep key name for reuse
+        "risk_score": round(profile_score,2),  # key name reused internally
         "btc_eth_pct": comps.get("btc_eth_pct"),
         "stable_pct": comps.get("stable_pct"),
         "alt_pct": comps.get("alt_pct"),
@@ -360,26 +375,42 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
         "pf_type": pf_type
     }
 
-# -------- App --------
+# ===== App =====
 def main():
-    inject_styles()
-    set_plotly_theme()
+    # Theme picker (sidebar)
+    with st.sidebar:
+        st.markdown("### Appearance")
+        theme = st.selectbox("Theme", ["Dark","Light"], index=0, key="theme_select")
+        st.caption("Tip: switch themes any time. Your choice persists for this session.")
 
-    st.markdown("""
-    <div class="hero">
-      <img src="assets/logo_ss.png" class="logo" />
-      <h1>Sovereign Stash</h1>
-      <h2>Crypto Portfolio Navigator</h2>
-      <p>No login. No data saved. Paste or import your holdings for a live portfolio profile view.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    set_plotly_theme(theme)
+    inject_css(theme)
+
+    # Hero with logo
+    with st.container():
+        c1, c2, c3 = st.columns([1,2,1])
+        with c2:
+            try:
+                st.image("assets/logo_ss.png", width=120)
+            except Exception:
+                st.write(" ")
+            st.markdown(
+                """
+                <div class="hero">
+                  <h1>Sovereign Stash</h1>
+                  <h2>Crypto Portfolio Navigator</h2>
+                  <p>No login. No data saved. Paste or import your holdings for a live portfolio profile view.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     st.markdown(
-        f"<div class='card' style='border-left:4px solid #E7B622;'><b>Disclaimer:</b> {DISCLAIMER_SHORT}</div>",
+        f"<div class='card accent-left'><b>Disclaimer:</b> {DISCLAIMER_SHORT}</div>",
         unsafe_allow_html=True
     )
 
-    # -------- Input / Analyze (writes frozen state) --------
+    # --- Input / Analyze (writes frozen state) ---
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("1) Paste or Import your portfolio")
 
@@ -414,7 +445,7 @@ def main():
     reset_clicked   = c2.button("Reset Analysis", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # helper: parse manual text into (token, qty)
+    # parse helper
     def parse_portfolio(text: str):
         items = []
         for raw in text.splitlines():
@@ -457,15 +488,15 @@ def main():
         st.info("Enter tokens and click **Analyze Portfolio** to see your portfolio profile.")
         st.stop()
 
-    # ========= TABS: Current vs Hypothesis =========
-    tab_current, tab_hypo = st.tabs(["📊 Current Profile", "🧪 What-If (Hypothesis)"])
+    # --- Tabs: Current vs What-If vs Methodology ---
+    tab_current, tab_hypo, tab_method = st.tabs(["📊 Current Profile", "🧪 What-If (Hypothesis)", "ℹ️ Methodology"])
 
-    # -------- CURRENT PROFILE (frozen; no recompute on UI tweaks) --------
+    # ===== CURRENT PROFILE (frozen snapshot) =====
     with tab_current:
         res = st.session_state["frozen_result"]
         df_display = res["df_display"]
         total_value = res["total_value"]
-        profile_score = res["risk_score"]   # number only; UI never says "risk"
+        profile_score = res["risk_score"]
         comps_out = res["comps_out"]
         metrics_for_ai = res["metrics_for_ai"]
         top_assets = res["top_assets"]
@@ -503,12 +534,12 @@ def main():
             tmp["direction"] = tmp["change"].apply(lambda v: "Up" if v >= 0 else "Down")
             fig_bar = px.bar(
                 tmp, x="symbol", y="change", color="direction",
-                color_discrete_map={"Up":"#16a34a","Down":"#dc2626"},
+                color_discrete_map={"Up":"#10b981","Down":"#ef4444"},
                 labels={"change":"24h %","symbol":"Asset","direction":""},
                 hover_data={"change":":.2f","symbol":True,"direction":False}
             )
             fig_bar.update_layout(margin=dict(l=0,r=0,t=20,b=0))
-            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#64748b")
+            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#94a3b8")
             st.plotly_chart(fig_bar, use_container_width=True)
             st.caption("Green = positive 24h, red = negative. Axis centered at 0% with a bold zero line.")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -525,7 +556,7 @@ def main():
             st.markdown(f"**Profile Type:** {pf_type}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            if client:  # show AI card only when key is set
+            if client:
                 st.markdown('<div class="card">', unsafe_allow_html=True)
                 st.subheader("AI Portfolio Notes")
                 st.text_area("AI-generated notes", value=ai_notes, height=210)
@@ -560,16 +591,15 @@ def main():
             st.download_button("Download HTML (print to PDF)", data=html, file_name="sovereign_stash_report.html", mime="text/html")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------- WHAT-IF / HYPOTHESIS (isolated; no recompute of current) --------
+    # ===== WHAT-IF / HYPOTHESIS (isolated; no recompute of current) =====
     with tab_hypo:
-        res = st.session_state["frozen_result"]  # read-only snapshot
+        res = st.session_state["frozen_result"]
         comps_out = res["comps_out"]
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("What-If (Hypothesis) — Group Targets")
         st.caption("This section uses the initial snapshot only. Changing these controls will not recompute the Current Profile.")
 
-        # Form so slider changes don't trigger global reruns; updates only on submit
         with st.form(key="hypo_form", clear_on_submit=False):
             c1, c2, c3 = st.columns(3)
             default_btc_eth = int(comps_out['btc_eth_pct'])
@@ -579,8 +609,7 @@ def main():
             tgt_stable  = c2.slider("Stablecoins %", 0, 100, prev.get("stable",  default_stable),  key="hypo_stable")
             max_alt = max(0, 100 - tgt_btc_eth - tgt_stable)
             tgt_alt = c3.slider("Alts %", 0, 100, int(prev.get("alt", max_alt)), key="hypo_alt")
-
-            submitted = st.form_submit_button("Update What-If", use_container_width=True)
+            st.form_submit_button("Update What-If", use_container_width=True)
 
         total = tgt_btc_eth + tgt_stable + tgt_alt
         if total != 100:
@@ -595,7 +624,7 @@ def main():
         fig_hypo.update_layout(margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig_hypo, use_container_width=True)
 
-        # compute hypothetical profile score using frozen diversification & vol only
+        # hypothetical profile score (frozen diversification/volatility components)
         w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
         s_btc_eth = max(0,min(1,(100.0 - tgt_btc_eth)/100.0))
         s_alt     = max(0,min(1, tgt_alt/100.0))
@@ -609,7 +638,72 @@ def main():
 
         delta = hypo_score - comps_out['risk_score']
         delta_txt = "lower" if delta < 0 else "higher"
-        st.caption(f"Result: hypothetical profile is **{abs(delta):.2f}** points {delta_txt} than your current profile ({comps_out['risk_score']:.2f}).")
+        st.caption(f"Hypothetical profile is **{abs(delta):.2f}** points {delta_txt} than current ({comps_out['risk_score']:.2f}).")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ===== METHODOLOGY (reference) =====
+    with tab_method:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("Methodology: How the Profile Score is computed")
+        st.markdown(
+            """
+<div style="line-height:1.6">
+<span class="pill">Educational Heuristic</span>
+<p style="margin-top:8px;">This is a simplified <b>Portfolio Profile</b> score from 0–100 that reflects how growth-oriented vs. conservative a snapshot may look, using observable traits. It is not financial advice.</p>
+
+### Components & Weights
+Weights:
+<ul>
+<li><b>BTC/ETH</b> — 0.30</li>
+<li><b>Alts</b> — 0.30</li>
+<li><b>Stablecoins</b> — 0.20</li>
+<li><b>Diversification</b> — 0.10</li>
+<li><b>Volatility proxy (24h)</b> — 0.10</li>
+</ul>
+
+We compute shares by USD value:
+<ul>
+<li><b>BTC+ETH %</b>: value in Bitcoin or Ethereum (after optional folding like wBTC→BTC, stETH→ETH)</li>
+<li><b>Stablecoins %</b>: value in major USD-pegged tokens (e.g., USDT, USDC, DAI)</li>
+<li><b>Alts %</b> = 100 − (BTC+ETH %) − (Stablecoins %)</li>
+</ul>
+
+Component scores (0–1):
+<pre style="white-space:pre-wrap;">
+s_btc_eth = (100 − BTC_ETH_pct) / 100    # more BTC/ETH ⇒ more conservative
+s_alt     = (Alts_pct) / 100             # more alts ⇒ more growth tilt
+s_stable  = (100 − Stable_pct) / 100     # more stables ⇒ more conservative
+diversification_score = min(N, 12) / 12  # N = unique assets (after folding)
+s_div     = 1 − diversification_score
+weighted_vol = Σ(|24h_change_i| * value_i) / total_value
+s_vol     = min(1, weighted_vol / 50)    # cap at 50%
+</pre>
+
+Final score:
+<pre style="white-space:pre-wrap;">
+raw = 0.30*s_btc_eth + 0.30*s_alt + 0.20*s_stable + 0.10*s_div + 0.10*s_vol
+Profile Score = clamp(raw * 100, 0, 100)
+</pre>
+
+Profile type labels:
+<ul>
+<li><b>0–33</b> → Conservative</li>
+<li><b>34–65</b> → Balanced</li>
+<li><b>66–100</b> → Growth-oriented</li>
+</ul>
+
+### Folding derivatives (optional)
+To make BTC/ETH share more meaningful, we group certain derivatives under their base asset (e.g., <b>wBTC → BTC</b>, <b>stETH/wETH/reth/cbeth → ETH</b>). This affects grouping only, not raw holdings.
+
+### What-If section
+The sliders set target group % (BTC/ETH, Stablecoins, Alts). We recompute the score using these targets plus your current diversification and 24h proxy (we do not change your actual holdings).
+
+### Data & Caveats
+Prices and 24h changes are from CoinGecko at run time. The 24h move is a coarse proxy; it does not replace full historical volatility modeling. Stablecoin lists and mappings are curated examples and not exhaustive.
+</div>
+            """,
+            unsafe_allow_html=True,
+        )
         st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
