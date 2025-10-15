@@ -1,6 +1,6 @@
 # --- app.py (Sovereign Stash — Crypto Portfolio Navigator, public no-auth) ---
-import os, json, re, hashlib
-from datetime import datetime
+import os, json, re, hashlib, time
+from datetime import datetime, timedelta, date
 from typing import Dict, List, Tuple
 
 import streamlit as st
@@ -54,10 +54,10 @@ def set_plotly_theme(theme: str):
         pio.templates["ss_dark"] = go.layout.Template(
             layout=go.Layout(
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#111827",  # dark gray (Tailwind gray-900)
+                plot_bgcolor="#111827",  # deep gray
                 font=dict(color="#F3F4F6"),
                 colorway=["#10b981", "#eab308", "#22a2ee", "#9333ea", "#64748b"],
-                xaxis=dict(gridcolor="#1f2937"),  # gray-800
+                xaxis=dict(gridcolor="#1f2937"),
                 yaxis=dict(gridcolor="#1f2937"),
             )
         )
@@ -78,70 +78,42 @@ def set_plotly_theme(theme: str):
         px.defaults.template = "plotly_white"
 
 def inject_css(theme: str):
-    # Dark now uses deep gray (not black) for better contrast; text is light
     if theme == "Dark":
-        bg = "#111827"      # gray-900
-        text = "#F3F4F6"    # gray-100
-        muted = "#9CA3AF"   # gray-400
-        card_bg = "linear-gradient(180deg, rgba(31,41,55,0.92), rgba(31,41,55,0.72))"  # gray-800
+        bg = "#111827"; text = "#F3F4F6"; muted = "#9CA3AF"
+        card_bg = "linear-gradient(180deg, rgba(31,41,55,0.92), rgba(31,41,55,0.72))"
         border = "rgba(255,255,255,0.10)"
         btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#0b1220"
-        accent = "#10b981"
-        zero_line = "#9CA3AF"
+        accent = "#10b981"; zero_line = "#9CA3AF"
     else:
-        bg = "#f7fafc"
-        text = "#0f172a"
-        muted = "#475569"
-        card_bg = "#ffffff"
-        border = "rgba(15,23,42,0.10)"
+        bg = "#f7fafc"; text = "#0f172a"; muted = "#475569"
+        card_bg = "#ffffff"; border = "rgba(15,23,42,0.10)"
         btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#ffffff"
-        accent = "#10b981"
-        zero_line = "#94a3b8"
+        accent = "#10b981"; zero_line = "#94a3b8"
 
     st.markdown(f"""
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
       html, body, [data-testid="stAppViewContainer"] {{
-        background: {bg};
-        color: {text};
+        background: {bg}; color: {text};
         font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       }}
       .hero {{ text-align:center; padding: 22px 10px 10px; }}
       .hero h1 {{ font-size: 38px; font-weight: 800; margin: 8px 0 0; }}
       .hero h2 {{ font-size: 22px; font-weight: 700; margin: 0; opacity: .95; }}
       .hero p {{ color: {muted}; }}
-
-      .card {{
-        background: {card_bg};
-        border: 1px solid {border};
-        border-radius: 16px; padding: 18px; margin: 14px 0;
-      }}
-
+      .card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 16px; padding: 18px; margin: 14px 0; }}
       h1, h2, .stMarkdown h2, .stMarkdown h3 {{ color: {text}; }}
-      .stMarkdown h2 {{ font-size: 22px; font-weight: 700; }}
-      .stMarkdown h3 {{ font-size: 18px; font-weight: 600; }}
-
+      .stMarkdown h2 {{ font-size: 22px; font-weight: 700; }} .stMarkdown h3 {{ font-size: 18px; font-weight: 600; }}
       .accent-left {{ border-left:4px solid {accent}; }}
       .pill {{ display:inline-block; padding:3px 10px; border-radius:999px; background:{accent}; color:#0b1220; font-weight:700; }}
-
-      /* Buttons (action + download) */
       .stButton>button, .stDownloadButton>button {{
-        background: {btn_bg} !important;
-        color: {btn_text} !important;
-        border: 0 !important;
-        border-radius: 12px !important;
-        padding: 10px 14px !important;
-        font-weight: 700 !important;
-        box-shadow: 0 6px 16px rgba(16,185,129,0.30) !important;
+        background:{btn_bg} !important; color:{btn_text} !important; border:0 !important;
+        border-radius:12px !important; padding:10px 14px !important; font-weight:700 !important;
+        box-shadow:0 6px 16px rgba(16,185,129,0.30) !important;
       }}
-      .stButton>button:hover, .stDownloadButton>button:hover {{
-        background: {btn_bg_hover} !important;
-      }}
-      label[for^="stFileUpload"] {{ font-weight: 600; }}
-      [data-testid="stDataFrame"] {{
-        border-radius: 12px; overflow: hidden; border:1px solid {border};
-      }}
-      .zero-line {{ color: {zero_line}; }}
+      .stButton>button:hover, .stDownloadButton>button:hover {{ background:{btn_bg_hover} !important; }}
+      [data-testid="stDataFrame"] {{ border-radius:12px; overflow:hidden; border:1px solid {border}; }}
+      .zero-line {{ color:{zero_line}; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -193,6 +165,25 @@ def fetch_market_data(ids: List[str]):
         out.extend(r.json())
     return out
 
+# --- Historical prices (for BTC-relative “strength”) ---
+@st.cache_data(ttl=3600)
+def fetch_history_usd_range(coin_id: str, start_ts: int, end_ts: int):
+    """Return DataFrame with ['date','price_usd'] for coin_id between [start_ts, end_ts] (unix seconds)."""
+    url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart/range"
+    params = {"vs_currency": "usd", "from": start_ts, "to": end_ts}
+    r = requests.get(url, params=params, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    prices = data.get("prices", [])
+    if not prices:
+        return pd.DataFrame(columns=["date","price_usd"])
+    df = pd.DataFrame(prices, columns=["ts_ms","price_usd"])
+    df["date"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True).dt.tz_convert(None)
+    df = df[["date","price_usd"]].sort_values("date")
+    # daily sampling (some coins return sub-hourly); take last value per day
+    df = df.set_index("date").resample("1D").last().dropna().reset_index()
+    return df
+
 # ===== Profile scoring & insights =====
 def calculate_profile_score(df: pd.DataFrame):
     total = df["value_usd"].sum()
@@ -236,7 +227,6 @@ def portfolio_insights(df_display: pd.DataFrame, comps: Dict) -> str:
     return "• " + "\n• ".join(lines)
 
 def generate_ai_summary(metrics: Dict, top_assets: List[Tuple[str,float]]) -> str:
-    # robust fallback (shown if no key or API unavailable)
     fallback = [
         f"Profile Score: {metrics.get('risk_score','N/A')} / 100",
         f"BTC+ETH: {metrics.get('btc_eth_pct','N/A')}%",
@@ -359,10 +349,10 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
     total_value = float(df["value_usd"].sum())
     if total_value <= 0: return None
     df["pct_portfolio"] = df["value_usd"]/total_value*100.0
-    df_display = df[["symbol","name","quantity","price_usd","value_usd","pct_portfolio","price_change_percentage_24h"]].sort_values("value_usd", ascending=False)
+    df_display = df[["symbol","name","quantity","price_usd","value_usd","pct_portfolio","price_change_percentage_24h","id"]].sort_values("value_usd", ascending=False)
     profile_score, comps = calculate_profile_score(df)
     comps_out = {
-        "risk_score": round(profile_score,2),  # key name reused internally
+        "risk_score": round(profile_score,2),
         "btc_eth_pct": comps.get("btc_eth_pct"),
         "stable_pct": comps.get("stable_pct"),
         "alt_pct": comps.get("alt_pct"),
@@ -397,7 +387,7 @@ def main():
 
     # Hero with logo
     with st.container():
-        c1, c2, c3 = st.columns([1,2,1])
+        _, c2, _ = st.columns([1,2,1])
         with c2:
             try:
                 st.image("assets/logo_ss.png", width=120)
@@ -446,7 +436,7 @@ def main():
             else: st.warning("No rows detected. Use columns Token / Amount or a known exchange export.")
 
     with st.expander("Advanced normalization & mapping"):
-        st.caption("Optionally fold well-known derivatives into base assets for profile grouping (e.g., wBTC→BTC, stETH→ETH).")
+        st.caption("Optionally fold derivatives into base assets for grouping (e.g., wBTC→BTC, stETH→ETH).")
         fold_derivs = st.checkbox("Fold derivatives into base assets for grouping", value=st.session_state.get("fold_derivs", True), key="fold_checkbox")
 
     c1, c2 = st.columns([1,1])
@@ -492,7 +482,6 @@ def main():
         st.session_state["frozen_result"] = res
         st.session_state["last_text"] = portfolio_text
         st.session_state["fold_derivs"] = fold_derivs
-        # initialize hypothetical per-asset weights from current pct_portfolio
         cur_df = res["df_display"]
         st.session_state["hypo_asset_weights"] = {sym: float(pct) for sym, pct in zip(cur_df["symbol"], cur_df["pct_portfolio"])}
 
@@ -503,7 +492,7 @@ def main():
     # --- Tabs: Current vs What-If vs Methodology ---
     tab_current, tab_hypo, tab_method = st.tabs(["📊 Current Profile", "🧪 What-If (Hypothesis)", "ℹ️ Methodology"])
 
-    # ===== CURRENT PROFILE (frozen snapshot) =====
+    # ===== CURRENT PROFILE =====
     with tab_current:
         res = st.session_state["frozen_result"]
         df_display = res["df_display"]
@@ -551,10 +540,96 @@ def main():
                 hover_data={"change":":.2f","symbol":True,"direction":False}
             )
             fig_bar.update_layout(margin=dict(l=0,r=0,t=20,b=0))
-            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#9CA3AF")  # dark gray zero line
+            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#9CA3AF")
             st.plotly_chart(fig_bar, use_container_width=True)
             st.caption("Green = positive 24h, red = negative. Axis centered at 0% with a bold zero line.")
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # ========== NEW: Relative to BTC (Strength) ==========
+            st.markdown('<div class="card">', unsafe_allow_html=True)
+            st.subheader("Relative to BTC (Strength)")
+            st.caption("Compares your tokens against Bitcoin over a date range. Each line is the token’s USD price divided by BTC’s USD price, normalized to 100 at the start.")
+
+            # Default token picks: top 6 by weight, skipping BTC itself
+            symbols_all = df_display["symbol"].tolist()
+            names_all   = df_display["name"].tolist()
+            ids_all     = df_display["id"].tolist()
+            df_map = pd.DataFrame({"symbol":symbols_all,"name":names_all,"id":ids_all})
+            default_syms = [s for s in df_display.loc[df_display["symbol"]!="BTC", "symbol"].head(6).tolist()]
+
+            sel_syms = st.multiselect(
+                "Choose tokens to plot vs BTC",
+                options=[s for s in symbols_all if s != "BTC"],
+                default=default_syms
+            )
+
+            # Date range (default: last 180d)
+            today = date.today()
+            default_start = today - timedelta(days=180)
+            start_date, end_date = st.date_input(
+                "Date range",
+                value=(default_start, today),
+                min_value=today - timedelta(days=365*5),  # up to 5 years back
+                max_value=today
+            )
+            smooth = st.checkbox("Smooth lines (7-day)", value=True)
+
+            if sel_syms and start_date and end_date and start_date < end_date:
+                # Resolve coin IDs for selected symbols + BTC
+                s2id = build_symbol_to_id_map()
+                # Map symbol->id best effort using display df first (more precise)
+                sym_to_id = {row.symbol: row.id for row in df_map.itertuples()}
+                btc_id = "bitcoin"
+
+                start_ts = int(time.mktime(datetime.combine(start_date, datetime.min.time()).timetuple()))
+                end_ts   = int(time.mktime(datetime.combine(end_date,   datetime.min.time()).timetuple()))
+
+                # Fetch BTC once
+                btc_hist = fetch_history_usd_range(btc_id, start_ts, end_ts)
+                if btc_hist.empty:
+                    st.warning("No BTC historical data returned for this range.")
+                else:
+                    # Build a long DataFrame of strength index per token
+                    lines = []
+                    for sym in sel_syms:
+                        cid = sym_to_id.get(sym) or PREFERRED_COINS.get(sym.lower()) or symbol_to_id(sym, s2id)
+                        try:
+                            hist = fetch_history_usd_range(cid, start_ts, end_ts)
+                        except Exception:
+                            hist = pd.DataFrame(columns=["date","price_usd"])
+                        if hist.empty:
+                            continue
+                        dfj = pd.merge(hist, btc_hist, on="date", suffixes=("_token","_btc"), how="inner")
+                        dfj = dfj[dfj["price_usd_btc"] > 0]
+                        if dfj.empty:
+                            continue
+                        dfj["strength"] = dfj["price_usd_token"] / dfj["price_usd_btc"]
+                        # Normalize to 100 at start
+                        base = dfj["strength"].iloc[0]
+                        if base and base > 0:
+                            dfj["strength_idx"] = (dfj["strength"] / base) * 100.0
+                        else:
+                            dfj["strength_idx"] = dfj["strength"] * 0.0
+                        if smooth:
+                            dfj["strength_idx"] = dfj["strength_idx"].rolling(7, min_periods=1).mean()
+                        dfj["symbol"] = sym
+                        lines.append(dfj[["date","symbol","strength_idx"]])
+
+                    if not lines:
+                        st.warning("No historical data found for the chosen tokens / date range.")
+                    else:
+                        rel = pd.concat(lines, ignore_index=True)
+                        fig_rel = px.line(rel, x="date", y="strength_idx", color="symbol",
+                                          labels={"strength_idx":"Strength vs BTC (start=100)","date":"Date"})
+                        fig_rel.update_layout(margin=dict(l=0,r=0,t=20,b=0))
+                        st.plotly_chart(fig_rel, use_container_width=True)
+
+                        st.caption("Above 100 → token outperformed BTC since start date; below 100 → underperformed BTC.")
+            else:
+                st.info("Pick at least one token (ex-BTC) and a valid date range to view relative strength.")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+            # ========== END new section ==========
 
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Key Insights")
@@ -613,31 +688,23 @@ def main():
         st.subheader("What-If (Hypothesis) — Group Targets")
         st.caption("Set BTC/ETH and Stablecoins; Alts is auto-computed so the three always sum to 100%.")
 
-        # Two sliders; third is computed to enforce 100%
         col_g1, col_g2, col_g3 = st.columns(3)
         defaults = st.session_state.get("hypo_targets", {
             "btc_eth": int(comps_out['btc_eth_pct']),
             "stable": int(comps_out['stable_pct']),
         })
-        # keep previous choices if present
         btc_eth_val = col_g1.slider("BTC+ETH %", 0, 100, defaults["btc_eth"], key="hypo_btc_eth_enforced")
         stable_max = max(0, 100 - btc_eth_val)
         stable_val = col_g2.slider("Stablecoins %", 0, stable_max, min(defaults["stable"], stable_max), key="hypo_stable_enforced")
         alt_val = 100 - btc_eth_val - stable_val
         col_g3.metric("Alts % (auto)", f"{alt_val}%")
-
         st.session_state["hypo_targets"] = {"btc_eth": btc_eth_val, "stable": stable_val, "alt": alt_val}
 
-        # Render hypothetical group pie
-        hypo_group = pd.DataFrame({
-            "group": ["BTC/ETH","Stablecoins","Alts"],
-            "target": [btc_eth_val, stable_val, alt_val]
-        })
+        hypo_group = pd.DataFrame({"group": ["BTC/ETH","Stablecoins","Alts"], "target": [btc_eth_val, stable_val, alt_val]})
         fig_hypo = px.pie(hypo_group, names="group", values="target", hole=0.35, title="Hypothetical Allocation (by group)")
         fig_hypo.update_layout(margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig_hypo, use_container_width=True)
 
-        # compute hypothetical profile score using frozen diversification & vol components
         w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
         s_btc_eth = max(0,min(1,(100.0 - btc_eth_val)/100.0))
         s_alt     = max(0,min(1, alt_val/100.0))
@@ -645,10 +712,8 @@ def main():
         s_div     = 1.0 - min(comps_out['num_assets'], 12)/12.0
         s_vol     = max(0,min(1, comps_out['weighted_vol_24h_pct']/50.0))
         hypo_score_group = float(max(0,min(100, (w_btc_eth*s_btc_eth + w_alt*s_alt + w_stable*s_stable + w_div*s_div + w_vol*s_vol)*100.0 )))
-
         st.markdown("**Hypothetical Profile Score (group targets):**")
         st.plotly_chart(profile_gauge(hypo_score_group), use_container_width=True)
-
         st.markdown('</div>', unsafe_allow_html=True)
 
         # ---- Per-asset hypothetical editor ----
@@ -656,15 +721,12 @@ def main():
         st.subheader("What-If (Per Asset)")
         st.caption("Adjust each token’s target %; on submit, totals normalize to 100% and update the charts below.")
 
-        # initialize state if missing
         if "hypo_asset_weights" not in st.session_state:
             st.session_state["hypo_asset_weights"] = {sym: float(pct) for sym, pct in zip(cur_df["symbol"], cur_df["pct_portfolio"])}
 
-        # Build a form to avoid global reruns while editing
         with st.form("asset_hypo_form", clear_on_submit=False):
             cols = st.columns(3)
             symbols = cur_df["symbol"].tolist()
-            # divide into thirds for nicer layout
             third = (len(symbols) + 2) // 3
             edited_weights = {}
 
@@ -681,51 +743,36 @@ def main():
 
             submitted_assets = st.form_submit_button("Update Per-Asset What-If", use_container_width=True)
 
-        # When submitted: normalize to 100
         if submitted_assets:
             total_raw = sum(edited_weights.values())
             if total_raw <= 0:
-                # keep old if user zeroed out everything
                 st.warning("Total was 0%. Keeping previous targets.")
             else:
                 norm = {k: (v/total_raw)*100.0 for k,v in edited_weights.items()}
                 st.session_state["hypo_asset_weights"] = norm
 
-        # Display current (possibly normalized) weights and charts
         weights = st.session_state["hypo_asset_weights"]
-        # Ensure we include only current symbols (in case user changed inputs earlier)
         weights = {sym: weights.get(sym, 0.0) for sym in symbols}
-        # Make a dataframe for the pie chart
-        df_asset_hypo = pd.DataFrame({
-            "symbol": list(weights.keys()),
-            "target_pct": [float(v) for v in weights.values()]
-        }).sort_values("target_pct", ascending=False)
+        df_asset_hypo = pd.DataFrame({"symbol": list(weights.keys()), "target_pct": [float(v) for v in weights.values()]}) \
+                        .sort_values("target_pct", ascending=False)
 
-        # Show sum & gentle hint
-        total_pct = df_asset_hypo["target_pct"].sum()
         col_sum1, col_sum2 = st.columns([3,1])
-        col_sum1.caption("Tip: Enter rough numbers; we normalize to 100% on submit.")
-        col_sum2.metric("Sum of targets", f"{total_pct:.2f}%")
+        col_sum1.caption("Numbers normalize to 100% on submit.")
+        col_sum2.metric("Sum of targets", f"{df_asset_hypo['target_pct'].sum():.2f}%")
 
-        # Pie by asset
         fig_asset = px.pie(df_asset_hypo, names="symbol", values="target_pct", hole=0.35, title="Hypothetical Allocation (by asset)")
         fig_asset.update_layout(margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig_asset, use_container_width=True)
 
-        # Compute hypothetical group score from per-asset targets for consistency
-        # Map each asset to BTC/ETH / Stable / Alt
-        key_col = "folded_id" if "folded_id" in cur_df.columns else "name"
-        # We'll derive groups from symbol->id via current df
-        symbol_to_id_map = dict(zip(cur_df["symbol"], cur_df.get("name", cur_df["symbol"])))
-        # For grouping, better to use 'name'->id where possible; but we only need group totals:
-        btc_eth_symbols = set(cur_df.loc[cur_df["name"].isin(["Bitcoin","Ethereum"]), "symbol"].tolist())
-        stable_symbols = set(cur_df.loc[cur_df["name"].str.lower().str.replace(" ","-").isin(STABLECOIN_IDS), "symbol"].tolist())
+        # Score per-asset → groups
+        names_map = dict(zip(cur_df["symbol"], cur_df["name"]))
+        btc_eth_syms = {s for s in symbols if names_map.get(s) in ["Bitcoin","Ethereum"]}
+        stable_syms  = {s for s in symbols if (names_map.get(s,"").lower().replace(" ","-") in STABLECOIN_IDS)}
 
-        btc_eth_target = sum(df_asset_hypo.loc[df_asset_hypo["symbol"].isin(btc_eth_symbols), "target_pct"])
-        stable_target  = sum(df_asset_hypo.loc[df_asset_hypo["symbol"].isin(stable_symbols), "target_pct"])
+        btc_eth_target = df_asset_hypo.loc[df_asset_hypo["symbol"].isin(btc_eth_syms), "target_pct"].sum()
+        stable_target  = df_asset_hypo.loc[df_asset_hypo["symbol"].isin(stable_syms), "target_pct"].sum()
         alt_target     = max(0.0, 100.0 - btc_eth_target - stable_target)
 
-        # Score using per-asset-derived groups
         s_btc_eth2 = max(0,min(1,(100.0 - btc_eth_target)/100.0))
         s_alt2     = max(0,min(1, alt_target/100.0))
         s_stable2  = max(0,min(1,(100.0 - stable_target)/100.0))
@@ -733,13 +780,11 @@ def main():
         s_div2    = 1.0 - min(comps_out['num_assets'], 12)/12.0
         s_vol2    = max(0,min(1, comps_out['weighted_vol_24h_pct']/50.0))
         hypo_score_assets = float(max(0,min(100, (w_btc_eth*s_btc_eth2 + w_alt*s_alt2 + w_stable*s_stable2 + w_div*s_div2 + w_vol*s_vol2)*100.0 )))
-
         st.markdown("**Hypothetical Profile Score (per-asset targets):**")
         st.plotly_chart(profile_gauge(hypo_score_assets), use_container_width=True)
-
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # ===== METHODOLOGY (reference) =====
+    # ===== METHODOLOGY =====
     with tab_method:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("Methodology: How the Profile Score is computed")
@@ -749,52 +794,10 @@ def main():
 <span class="pill">Educational Heuristic</span>
 <p style="margin-top:8px;">This is a simplified <b>Portfolio Profile</b> score from 0–100 that reflects how growth-oriented vs. conservative a snapshot may look, using observable traits. It is not financial advice.</p>
 
-### Components & Weights
-Weights:
-<ul>
-<li><b>BTC/ETH</b> — 0.30</li>
-<li><b>Alts</b> — 0.30</li>
-<li><b>Stablecoins</b> — 0.20</li>
-<li><b>Diversification</b> — 0.10</li>
-<li><b>Volatility proxy (24h)</b> — 0.10</li>
-</ul>
+<b>Weights</b>: BTC/ETH 0.30, Alts 0.30, Stablecoins 0.20, Diversification 0.10, 24h Volatility Proxy 0.10  
+<b>Final</b>: <code>Profile Score = clamp( (0.30*s_btc_eth + 0.30*s_alt + 0.20*s_stable + 0.10*s_div + 0.10*s_vol) * 100, 0, 100 )</code>
 
-We compute shares by USD value:
-<ul>
-<li><b>BTC+ETH %</b>: value in Bitcoin or Ethereum (after optional folding like wBTC→BTC, stETH→ETH)</li>
-<li><b>Stablecoins %</b>: value in major USD-pegged tokens (e.g., USDT, USDC, DAI)</li>
-<li><b>Alts %</b> = 100 − (BTC+ETH %) − (Stablecoins %)</li>
-</ul>
-
-Component scores (0–1):
-<pre style="white-space:pre-wrap;">
-s_btc_eth = (100 − BTC_ETH_pct) / 100    # more BTC/ETH ⇒ more conservative
-s_alt     = (Alts_pct) / 100             # more alts ⇒ more growth tilt
-s_stable  = (100 − Stable_pct) / 100     # more stables ⇒ more conservative
-diversification_score = min(N, 12) / 12  # N = unique assets (after folding)
-s_div     = 1 − diversification_score
-weighted_vol = Σ(|24h_change_i| * value_i) / total_value
-s_vol     = min(1, weighted_vol / 50)    # cap at 50%
-</pre>
-
-Final score:
-<pre style="white-space:pre-wrap;">
-raw = 0.30*s_btc_eth + 0.30*s_alt + 0.20*s_stable + 0.10*s_div + 0.10*s_vol
-Profile Score = clamp(raw * 100, 0, 100)
-</pre>
-
-Profile type labels:
-<ul>
-<li><b>0–33</b> → Conservative</li>
-<li><b>34–65</b> → Balanced</li>
-<li><b>66–100</b> → Growth-oriented</li>
-</ul>
-
-### Folding derivatives (optional)
-To make BTC/ETH share more meaningful, we group certain derivatives under their base asset (e.g., <b>wBTC → BTC</b>, <b>stETH/wETH/reth/cbeth → ETH</b>). This affects grouping only, not raw holdings.
-
-### What-If section
-You can adjust **group targets** (BTC/ETH & Stablecoins; Alts auto-fills to 100%) or edit **per-asset targets**. Per-asset values are normalized to 100% on submit. These simulations keep your current diversification count and 24h proxy.
+Details appear in the earlier Methodology notes; sliders in the What-If sections don’t change your real holdings.
 </div>
             """,
             unsafe_allow_html=True,
