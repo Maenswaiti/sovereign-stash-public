@@ -48,17 +48,18 @@ DISCLAIMER_SHORT = (
     "Crypto assets are volatile and you can lose money."
 )
 
-# ===== Theme system (Dark / Light with green accents) =====
+# ===== Theme system (Material + glass accents) =====
 def set_plotly_theme(theme: str):
     if theme == "Dark":
+        # Material dark with glass canvas tones
         pio.templates["ss_dark"] = go.layout.Template(
             layout=go.Layout(
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#111827",  # deep gray
-                font=dict(color="#F3F4F6"),
-                colorway=["#10b981", "#eab308", "#22a2ee", "#9333ea", "#64748b"],
-                xaxis=dict(gridcolor="#1f2937"),
-                yaxis=dict(gridcolor="#1f2937"),
+                plot_bgcolor="#121212",  # Material dark
+                font=dict(color="#E6E6E6"),
+                colorway=["#10b981", "#4f46e5", "#f59e0b", "#22a2ee", "#e11d48"],
+                xaxis=dict(gridcolor="#1F1F1F"),
+                yaxis=dict(gridcolor="#1F1F1F"),
             )
         )
         pio.templates.default = "ss_dark"
@@ -69,7 +70,7 @@ def set_plotly_theme(theme: str):
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="#ffffff",
                 font=dict(color="#0f172a"),
-                colorway=["#10b981", "#0ea5e9", "#eab308", "#9333ea", "#64748b"],
+                colorway=["#10b981", "#2563eb", "#f59e0b", "#22a2ee", "#e11d48"],
                 xaxis=dict(gridcolor="#e5e7eb"),
                 yaxis=dict(gridcolor="#e5e7eb"),
             )
@@ -78,53 +79,96 @@ def set_plotly_theme(theme: str):
         px.defaults.template = "plotly_white"
 
 def inject_css(theme: str):
+    # Glass variables
     if theme == "Dark":
-        bg = "#111827"; text = "#F3F4F6"; muted = "#9CA3AF"
-        card_bg = "linear-gradient(180deg, rgba(31,41,55,0.92), rgba(31,41,55,0.72))"
-        border = "rgba(255,255,255,0.10)"
-        btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#0b1220"
+        # Material dark base + glass cards
+        bg = "#0B0B0C"           # slightly off-black for depth
+        bg_grad = "radial-gradient(1200px 800px at 20% -10%, rgba(16,185,129,0.12), transparent), radial-gradient(1000px 600px at 120% 20%, rgba(79,70,229,0.10), transparent)"
+        text = "#E6E6E6"
+        muted = "#A3A3A3"
+        card_bg = "rgba(23,23,24,0.55)"  # glass
+        border = "rgba(255,255,255,0.12)"
+        blur = "12px"
+        btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#08100c"
         accent = "#10b981"; zero_line = "#9CA3AF"
+        input_bg = "rgba(255,255,255,0.06)"
     else:
-        bg = "#f7fafc"; text = "#0f172a"; muted = "#475569"
-        card_bg = "#ffffff"; border = "rgba(15,23,42,0.10)"
+        # Light with subtle glass panels
+        bg = "#F5F7FB"
+        bg_grad = "radial-gradient(1200px 800px at -10% 30%, rgba(16,185,129,0.08), transparent), radial-gradient(900px 600px at 110% 0%, rgba(37,99,235,0.08), transparent)"
+        text = "#0f172a"
+        muted = "#475569"
+        card_bg = "rgba(255,255,255,0.70)"
+        border = "rgba(15,23,42,0.10)"
+        blur = "10px"
         btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#ffffff"
         accent = "#10b981"; zero_line = "#94a3b8"
+        input_bg = "rgba(255,255,255,0.80)"
 
     st.markdown(f"""
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
       html, body, [data-testid="stAppViewContainer"] {{
-        background: {bg}; color: {text};
-        font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: {bg};
+        background-image: {bg_grad};
+        color: {text};
+        font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       }}
-      .hero {{ text-align:center; padding: 22px 10px 10px; }}
-      .hero h1 {{ font-size: 38px; font-weight: 800; margin: 8px 0 0; }}
-      .hero h2 {{ font-size: 22px; font-weight: 700; margin: 0; opacity: .95; }}
-      .hero p {{ color: {muted}; }}
-      .card {{ background: {card_bg}; border: 1px solid {border}; border-radius: 16px; padding: 18px; margin: 14px 0; }}
-      h1, h2, .stMarkdown h2, .stMarkdown h3 {{ color: {text}; }}
-      .stMarkdown h2 {{ font-size: 22px; font-weight: 700; }} .stMarkdown h3 {{ font-size: 18px; font-weight: 600; }}
-      .accent-left {{ border-left:4px solid {accent}; }}
-      .pill {{ display:inline-block; padding:3px 10px; border-radius:999px; background:{accent}; color:#0b1220; font-weight:700; }}
+
+      .hero {{ text-align:center; padding: 24px 10px 8px; }}
+      .hero h1 {{ font-size: 40px; font-weight: 800; letter-spacing:-0.02em; margin: 8px 0 2px; }}
+      .hero h2 {{ font-size: 20px; font-weight: 600; opacity: .92; margin: 0; }}
+      .hero p {{ color: {muted}; margin-top: 4px; }}
+
+      .glass-card {{
+        background: {card_bg};
+        border: 1px solid {border};
+        border-radius: 18px;
+        padding: 18px;
+        margin: 14px 0;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.20);
+        backdrop-filter: blur({blur});
+        -webkit-backdrop-filter: blur({blur});
+      }}
+
+      .accent-left {{ border-left: 4px solid {accent}; padding-left: 12px; }}
+
+      .pill {{
+        display:inline-block; padding:4px 12px; border-radius:999px;
+        background:{accent}; color:#08100c; font-weight:700;
+      }}
+
       .stButton>button, .stDownloadButton>button {{
-        background:{btn_bg} !important; color:{btn_text} !important; border:0 !important;
-        border-radius:12px !important; padding:10px 14px !important; font-weight:700 !important;
-        box-shadow:0 6px 16px rgba(16,185,129,0.30) !important;
+        background:{btn_bg} !important; color:{btn_text} !important;
+        border: 0 !important; border-radius: 14px !important;
+        padding: 10px 14px !important; font-weight: 700 !important;
+        box-shadow: 0 6px 18px rgba(16,185,129,0.35) !important;
       }}
       .stButton>button:hover, .stDownloadButton>button:hover {{ background:{btn_bg_hover} !important; }}
-      [data-testid="stDataFrame"] {{ border-radius:12px; overflow:hidden; border:1px solid {border}; }}
+
+      /* Inputs get a glass-like fill */
+      .stTextArea textarea, .stTextInput input, .stSelectbox div[data-baseweb="select"] > div, .stFileUploader div[data-testid="stFileUploaderDropzone"] {{
+        background: {input_bg} !important;
+        border: 1px solid {border} !important; border-radius:12px !important;
+      }}
+
+      [data-testid="stDataFrame"] {{
+        border-radius: 12px; overflow: hidden; border:1px solid {border};
+      }}
+      .section-title {{ font-weight:800; letter-spacing:-0.01em; margin-bottom:6px; }}
       .zero-line {{ color:{zero_line}; }}
     </style>
     """, unsafe_allow_html=True)
 
 # ===== Market data helpers =====
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def fetch_coin_list():
     r = requests.get(f"{COINGECKO_BASE}/coins/list", timeout=25)
     r.raise_for_status()
     return r.json()
 
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=3600, show_spinner=False)
 def build_symbol_to_id_map():
     m = {}
     for c in fetch_coin_list():
@@ -165,24 +209,49 @@ def fetch_market_data(ids: List[str]):
         out.extend(r.json())
     return out
 
-# --- Historical prices (for BTC-relative “strength”) ---
-@st.cache_data(ttl=3600)
-def fetch_history_usd_range(coin_id: str, start_ts: int, end_ts: int):
-    """Return DataFrame with ['date','price_usd'] for coin_id between [start_ts, end_ts] (unix seconds)."""
+# --- Historical prices (for BTC-relative “strength”) with resilience ---
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_history_usd_range(coin_id: str, start_ts: int, end_ts: int, retries: int = 3) -> pd.DataFrame:
+    """
+    Resilient fetch of daily USD prices for a coin between [start_ts, end_ts].
+    Gracefully handles CoinGecko rate limits / 4xx and returns an empty DataFrame on failure.
+    """
+    if not coin_id or end_ts <= start_ts:
+        return pd.DataFrame(columns=["date", "price_usd"])
+
     url = f"{COINGECKO_BASE}/coins/{coin_id}/market_chart/range"
-    params = {"vs_currency": "usd", "from": start_ts, "to": end_ts}
-    r = requests.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    prices = data.get("prices", [])
-    if not prices:
-        return pd.DataFrame(columns=["date","price_usd"])
-    df = pd.DataFrame(prices, columns=["ts_ms","price_usd"])
-    df["date"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True).dt.tz_convert(None)
-    df = df[["date","price_usd"]].sort_values("date")
-    # daily sampling (some coins return sub-hourly); take last value per day
-    df = df.set_index("date").resample("1D").last().dropna().reset_index()
-    return df
+    params = {"vs_currency": "usd", "from": max(0, start_ts), "to": max(0, end_ts)}
+
+    last_err = None
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get(url, params=params, timeout=30)
+            if r.status_code == 429:
+                time.sleep(1.2 * (attempt + 1))
+                continue
+            r.raise_for_status()
+            data = r.json()
+            prices = data.get("prices", [])
+            if not prices:
+                return pd.DataFrame(columns=["date","price_usd"])
+
+            df = pd.DataFrame(prices, columns=["ts_ms","price_usd"])
+            df["date"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True).dt.tz_convert(None)
+            df = df[["date","price_usd"]].sort_values("date")
+            df = df.set_index("date").resample("1D").last().dropna().reset_index()
+            return df
+
+        except requests.exceptions.HTTPError as e:
+            last_err = e
+            code = getattr(e.response, "status_code", None)
+            if code and 400 <= code < 500 and code != 429:
+                break
+            time.sleep(0.8 * (attempt + 1))
+        except Exception as e:
+            last_err = e
+            time.sleep(0.6 * (attempt + 1))
+
+    return pd.DataFrame(columns=["date","price_usd"])
 
 # ===== Profile scoring & insights =====
 def calculate_profile_score(df: pd.DataFrame):
@@ -405,15 +474,15 @@ def main():
             )
 
     st.markdown(
-        f"<div class='card accent-left'><b>Disclaimer:</b> {DISCLAIMER_SHORT}</div>",
+        f"<div class='glass-card accent-left'><b>Disclaimer:</b> {DISCLAIMER_SHORT}</div>",
         unsafe_allow_html=True
     )
 
     # --- Input / Analyze (writes frozen state) ---
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("1) Paste or Import your portfolio")
+    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>1) Paste or Import your portfolio</div>", unsafe_allow_html=True)
 
-    colA, colB = st.columns([1,1])
+    colA, colB = st.columns([1,1], gap="large")
     with colA:
         default_text = "BTC: 0.5\nETH: 2.0\nADA: 10000\nUSDT: 1500"
         portfolio_text = st.text_area(
@@ -439,7 +508,7 @@ def main():
         st.caption("Optionally fold derivatives into base assets for grouping (e.g., wBTC→BTC, stETH→ETH).")
         fold_derivs = st.checkbox("Fold derivatives into base assets for grouping", value=st.session_state.get("fold_derivs", True), key="fold_checkbox")
 
-    c1, c2 = st.columns([1,1])
+    c1, c2 = st.columns([1,1], gap="medium")
     analyze_clicked = c1.button("Analyze Portfolio", use_container_width=True, type="primary")
     reset_clicked   = c2.button("Reset Analysis", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
@@ -505,11 +574,11 @@ def main():
 
         ai_notes = generate_ai_summary(metrics_for_ai, top_assets)
 
-        left, right = st.columns([2,1])
+        left, right = st.columns([2,1], gap="large")
 
         with left:
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("2) Portfolio Overview")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>2) Portfolio Overview</div>", unsafe_allow_html=True)
             st.dataframe(
                 df_display.style.format({
                     "price_usd":"${:,.4f}","value_usd":"${:,.2f}",
@@ -519,38 +588,37 @@ def main():
             )
             st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Allocation by Asset")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Allocation by Asset</div>", unsafe_allow_html=True)
             fig_alloc = px.pie(df_display, names="symbol", values="pct_portfolio", hole=0.35)
             fig_alloc.update_traces(textposition='inside', textinfo='percent+label')
-            fig_alloc.update_layout(margin=dict(l=0,r=0,t=20,b=0))
+            fig_alloc.update_layout(margin=dict(l=0,r=0,t=14,b=0))
             st.plotly_chart(fig_alloc, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("24h % Change by Asset")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>24h % Change by Asset</div>", unsafe_allow_html=True)
             tmp = df_display.copy()
             tmp["change"] = tmp["price_change_percentage_24h"].fillna(0.0)
             tmp = tmp.sort_values("change", ascending=False)
             tmp["direction"] = tmp["change"].apply(lambda v: "Up" if v >= 0 else "Down")
             fig_bar = px.bar(
                 tmp, x="symbol", y="change", color="direction",
-                color_discrete_map={"Up":"#10b981","Down":"#ef4444"},
+                color_discrete_map={"Up":"#10b981","Down":"#e11d48"},
                 labels={"change":"24h %","symbol":"Asset","direction":""},
                 hover_data={"change":":.2f","symbol":True,"direction":False}
             )
-            fig_bar.update_layout(margin=dict(l=0,r=0,t=20,b=0))
+            fig_bar.update_layout(margin=dict(l=0,r=0,t=14,b=0))
             fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#9CA3AF")
             st.plotly_chart(fig_bar, use_container_width=True)
             st.caption("Green = positive 24h, red = negative. Axis centered at 0% with a bold zero line.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # ========== NEW: Relative to BTC (Strength) ==========
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Relative to BTC (Strength)")
-            st.caption("Compares your tokens against Bitcoin over a date range. Each line is the token’s USD price divided by BTC’s USD price, normalized to 100 at the start.")
+            # ========== Relative to BTC (Strength) ==========
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Relative to BTC (Strength)</div>", unsafe_allow_html=True)
+            st.caption("Each line shows token price / BTC price, normalized to 100 at the start of the selected period.")
 
-            # Default token picks: top 6 by weight, skipping BTC itself
             symbols_all = df_display["symbol"].tolist()
             names_all   = df_display["name"].tolist()
             ids_all     = df_display["id"].tolist()
@@ -563,53 +631,49 @@ def main():
                 default=default_syms
             )
 
-            # Date range (default: last 180d)
             today = date.today()
             default_start = today - timedelta(days=180)
             start_date, end_date = st.date_input(
                 "Date range",
                 value=(default_start, today),
-                min_value=today - timedelta(days=365*5),  # up to 5 years back
+                min_value=today - timedelta(days=365*5),
                 max_value=today
             )
             smooth = st.checkbox("Smooth lines (7-day)", value=True)
 
             if sel_syms and start_date and end_date and start_date < end_date:
-                # Resolve coin IDs for selected symbols + BTC
                 s2id = build_symbol_to_id_map()
-                # Map symbol->id best effort using display df first (more precise)
                 sym_to_id = {row.symbol: row.id for row in df_map.itertuples()}
                 btc_id = "bitcoin"
 
                 start_ts = int(time.mktime(datetime.combine(start_date, datetime.min.time()).timetuple()))
                 end_ts   = int(time.mktime(datetime.combine(end_date,   datetime.min.time()).timetuple()))
+                # Clamp to now and max span
+                now_ts = int(time.time())
+                start_ts = max(0, min(start_ts, now_ts - 60))
+                end_ts   = max(0, min(end_ts, now_ts))
+                MAX_SPAN = 60 * 60 * 24 * 365 * 5
+                if end_ts - start_ts > MAX_SPAN:
+                    start_ts = end_ts - MAX_SPAN
 
-                # Fetch BTC once
                 btc_hist = fetch_history_usd_range(btc_id, start_ts, end_ts)
                 if btc_hist.empty:
-                    st.warning("No BTC historical data returned for this range.")
+                    st.warning("BTC historical data is unavailable for the chosen range. Try a shorter window.")
                 else:
-                    # Build a long DataFrame of strength index per token
                     lines = []
                     for sym in sel_syms:
                         cid = sym_to_id.get(sym) or PREFERRED_COINS.get(sym.lower()) or symbol_to_id(sym, s2id)
-                        try:
-                            hist = fetch_history_usd_range(cid, start_ts, end_ts)
-                        except Exception:
-                            hist = pd.DataFrame(columns=["date","price_usd"])
+                        hist = fetch_history_usd_range(cid, start_ts, end_ts)
                         if hist.empty:
+                            st.info(f"Skipping {sym}: no historical data returned for this range (or rate-limited).")
                             continue
                         dfj = pd.merge(hist, btc_hist, on="date", suffixes=("_token","_btc"), how="inner")
                         dfj = dfj[dfj["price_usd_btc"] > 0]
                         if dfj.empty:
                             continue
                         dfj["strength"] = dfj["price_usd_token"] / dfj["price_usd_btc"]
-                        # Normalize to 100 at start
                         base = dfj["strength"].iloc[0]
-                        if base and base > 0:
-                            dfj["strength_idx"] = (dfj["strength"] / base) * 100.0
-                        else:
-                            dfj["strength_idx"] = dfj["strength"] * 0.0
+                        dfj["strength_idx"] = (dfj["strength"]/base)*100.0 if (base and base>0) else 0.0
                         if smooth:
                             dfj["strength_idx"] = dfj["strength_idx"].rolling(7, min_periods=1).mean()
                         dfj["symbol"] = sym
@@ -621,36 +685,35 @@ def main():
                         rel = pd.concat(lines, ignore_index=True)
                         fig_rel = px.line(rel, x="date", y="strength_idx", color="symbol",
                                           labels={"strength_idx":"Strength vs BTC (start=100)","date":"Date"})
-                        fig_rel.update_layout(margin=dict(l=0,r=0,t=20,b=0))
+                        fig_rel.update_layout(margin=dict(l=0,r=0,t=14,b=0))
                         st.plotly_chart(fig_rel, use_container_width=True)
-
-                        st.caption("Above 100 → token outperformed BTC since start date; below 100 → underperformed BTC.")
+                        st.caption("Above 100 → outperformed BTC since start; below 100 → underperformed BTC.")
             else:
                 st.info("Pick at least one token (ex-BTC) and a valid date range to view relative strength.")
 
             st.markdown('</div>', unsafe_allow_html=True)
-            # ========== END new section ==========
+            # ========== End Relative to BTC ==========
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Key Insights")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Key Insights</div>", unsafe_allow_html=True)
             st.markdown(portfolio_insights(df_display, comps_out))
             st.markdown('</div>', unsafe_allow_html=True)
 
         with right:
-            st.markdown('<div class="card center">', unsafe_allow_html=True)
-            st.subheader("Profile Gauge")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Profile Gauge</div>", unsafe_allow_html=True)
             st.plotly_chart(profile_gauge(profile_score), use_container_width=True)
             st.markdown(f"**Profile Type:** {pf_type}")
             st.markdown('</div>', unsafe_allow_html=True)
 
             if client:
-                st.markdown('<div class="card">', unsafe_allow_html=True)
-                st.subheader("AI Portfolio Notes")
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("<div class='section-title'>AI Portfolio Notes</div>", unsafe_allow_html=True)
                 st.text_area("AI-generated notes", value=ai_notes, height=210)
                 st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Download Report")
+            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+            st.markdown("<div class='section-title'>Download Report</div>", unsafe_allow_html=True)
             html = f"""<html><head><meta charset='utf-8'><title>Sovereign Stash Report</title></head>
             <body style='font-family:Arial;background:#ffffff;color:#0f172a;'>
             <h2>Sovereign Stash — Crypto Portfolio Navigator</h2>
@@ -684,9 +747,9 @@ def main():
         comps_out = res["comps_out"]
         cur_df = res["df_display"].copy()
 
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("What-If (Hypothesis) — Group Targets")
-        st.caption("Set BTC/ETH and Stablecoins; Alts is auto-computed so the three always sum to 100%.")
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>What-If (Hypothesis) — Group Targets</div>", unsafe_allow_html=True)
+        st.caption("Adjust BTC/ETH and Stablecoins; Alts auto-fills so totals always equal 100%.")
 
         col_g1, col_g2, col_g3 = st.columns(3)
         defaults = st.session_state.get("hypo_targets", {
@@ -702,7 +765,7 @@ def main():
 
         hypo_group = pd.DataFrame({"group": ["BTC/ETH","Stablecoins","Alts"], "target": [btc_eth_val, stable_val, alt_val]})
         fig_hypo = px.pie(hypo_group, names="group", values="target", hole=0.35, title="Hypothetical Allocation (by group)")
-        fig_hypo.update_layout(margin=dict(l=0,r=0,t=30,b=0))
+        fig_hypo.update_layout(margin=dict(l=0,r=0,t=14,b=0))
         st.plotly_chart(fig_hypo, use_container_width=True)
 
         w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
@@ -717,8 +780,8 @@ def main():
         st.markdown('</div>', unsafe_allow_html=True)
 
         # ---- Per-asset hypothetical editor ----
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("What-If (Per Asset)")
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>What-If (Per Asset)</div>", unsafe_allow_html=True)
         st.caption("Adjust each token’s target %; on submit, totals normalize to 100% and update the charts below.")
 
         if "hypo_asset_weights" not in st.session_state:
@@ -761,7 +824,7 @@ def main():
         col_sum2.metric("Sum of targets", f"{df_asset_hypo['target_pct'].sum():.2f}%")
 
         fig_asset = px.pie(df_asset_hypo, names="symbol", values="target_pct", hole=0.35, title="Hypothetical Allocation (by asset)")
-        fig_asset.update_layout(margin=dict(l=0,r=0,t=30,b=0))
+        fig_asset.update_layout(margin=dict(l=0,r=0,t=14,b=0))
         st.plotly_chart(fig_asset, use_container_width=True)
 
         # Score per-asset → groups
@@ -786,8 +849,8 @@ def main():
 
     # ===== METHODOLOGY =====
     with tab_method:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Methodology: How the Profile Score is computed")
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("<div class='section-title'>Methodology: How the Profile Score is computed</div>", unsafe_allow_html=True)
         st.markdown(
             """
 <div style="line-height:1.6">
@@ -797,7 +860,15 @@ def main():
 <b>Weights</b>: BTC/ETH 0.30, Alts 0.30, Stablecoins 0.20, Diversification 0.10, 24h Volatility Proxy 0.10  
 <b>Final</b>: <code>Profile Score = clamp( (0.30*s_btc_eth + 0.30*s_alt + 0.20*s_stable + 0.10*s_div + 0.10*s_vol) * 100, 0, 100 )</code>
 
-Details appear in the earlier Methodology notes; sliders in the What-If sections don’t change your real holdings.
+<ul>
+<li><b>BTC+ETH %</b> is the share in Bitcoin &amp; Ethereum (optionally folding wBTC→BTC, stETH→ETH, etc.).</li>
+<li><b>Stablecoins %</b> is the share in major USD-pegged tokens (e.g., USDT, USDC, DAI).</li>
+<li><b>Alts %</b> = 100 − BTC/ETH − Stablecoins.</li>
+<li><b>Diversification</b> uses unique asset count (capped at 12) — more names ⇒ slightly lower profile score.</li>
+<li><b>Volatility proxy</b> uses value-weighted absolute 24h move; it’s a coarse heuristic, not a risk model.</li>
+</ul>
+
+The What-If tools simulate changes to group or asset weights while keeping your current diversification and 24h proxy.
 </div>
             """,
             unsafe_allow_html=True,
