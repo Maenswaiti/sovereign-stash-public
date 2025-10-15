@@ -54,11 +54,11 @@ def set_plotly_theme(theme: str):
         pio.templates["ss_dark"] = go.layout.Template(
             layout=go.Layout(
                 paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#0b1220",
-                font=dict(color="#EAF2FF"),
+                plot_bgcolor="#111827",  # dark gray (Tailwind gray-900)
+                font=dict(color="#F3F4F6"),
                 colorway=["#10b981", "#eab308", "#22a2ee", "#9333ea", "#64748b"],
-                xaxis=dict(gridcolor="#1f2a44"),
-                yaxis=dict(gridcolor="#1f2a44"),
+                xaxis=dict(gridcolor="#1f2937"),  # gray-800
+                yaxis=dict(gridcolor="#1f2937"),
             )
         )
         pio.templates.default = "ss_dark"
@@ -78,18 +78,25 @@ def set_plotly_theme(theme: str):
         px.defaults.template = "plotly_white"
 
 def inject_css(theme: str):
+    # Dark now uses deep gray (not black) for better contrast; text is light
     if theme == "Dark":
-        bg = "#0f172a"; text = "#EAF2FF"; muted = "#9ab0c5"
-        card_bg = "linear-gradient(180deg, rgba(13,20,29,0.92), rgba(13,20,29,0.72))"
+        bg = "#111827"      # gray-900
+        text = "#F3F4F6"    # gray-100
+        muted = "#9CA3AF"   # gray-400
+        card_bg = "linear-gradient(180deg, rgba(31,41,55,0.92), rgba(31,41,55,0.72))"  # gray-800
         border = "rgba(255,255,255,0.10)"
         btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#0b1220"
         accent = "#10b981"
+        zero_line = "#9CA3AF"
     else:
-        bg = "#f7fafc"; text = "#0f172a"; muted = "#475569"
+        bg = "#f7fafc"
+        text = "#0f172a"
+        muted = "#475569"
         card_bg = "#ffffff"
         border = "rgba(15,23,42,0.10)"
         btn_bg = "#10b981"; btn_bg_hover = "#059669"; btn_text = "#ffffff"
         accent = "#10b981"
+        zero_line = "#94a3b8"
 
     st.markdown(f"""
     <style>
@@ -114,6 +121,9 @@ def inject_css(theme: str):
       .stMarkdown h2 {{ font-size: 22px; font-weight: 700; }}
       .stMarkdown h3 {{ font-size: 18px; font-weight: 600; }}
 
+      .accent-left {{ border-left:4px solid {accent}; }}
+      .pill {{ display:inline-block; padding:3px 10px; border-radius:999px; background:{accent}; color:#0b1220; font-weight:700; }}
+
       /* Buttons (action + download) */
       .stButton>button, .stDownloadButton>button {{
         background: {btn_bg} !important;
@@ -131,8 +141,7 @@ def inject_css(theme: str):
       [data-testid="stDataFrame"] {{
         border-radius: 12px; overflow: hidden; border:1px solid {border};
       }}
-      .accent-left {{ border-left:4px solid {accent}; }}
-      .pill {{ display:inline-block; padding:3px 10px; border-radius:999px; background:{accent}; color:#0b1220; font-weight:700; }}
+      .zero-line {{ color: {zero_line}; }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -463,7 +472,7 @@ def main():
         return items
 
     if reset_clicked:
-        for k in ["frozen_hash","frozen_holdings","frozen_result","last_text","fold_derivs","hypo_targets"]:
+        for k in ["frozen_hash","frozen_holdings","frozen_result","last_text","fold_derivs","hypo_targets","hypo_asset_weights"]:
             st.session_state.pop(k, None)
         st.experimental_rerun()
 
@@ -483,6 +492,9 @@ def main():
         st.session_state["frozen_result"] = res
         st.session_state["last_text"] = portfolio_text
         st.session_state["fold_derivs"] = fold_derivs
+        # initialize hypothetical per-asset weights from current pct_portfolio
+        cur_df = res["df_display"]
+        st.session_state["hypo_asset_weights"] = {sym: float(pct) for sym, pct in zip(cur_df["symbol"], cur_df["pct_portfolio"])}
 
     if "frozen_result" not in st.session_state:
         st.info("Enter tokens and click **Analyze Portfolio** to see your portfolio profile.")
@@ -539,7 +551,7 @@ def main():
                 hover_data={"change":":.2f","symbol":True,"direction":False}
             )
             fig_bar.update_layout(margin=dict(l=0,r=0,t=20,b=0))
-            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#94a3b8")
+            fig_bar.update_yaxes(zeroline=True, zerolinewidth=2, zerolinecolor="#9CA3AF")  # dark gray zero line
             st.plotly_chart(fig_bar, use_container_width=True)
             st.caption("Green = positive 24h, red = negative. Axis centered at 0% with a bold zero line.")
             st.markdown('</div>', unsafe_allow_html=True)
@@ -595,50 +607,136 @@ def main():
     with tab_hypo:
         res = st.session_state["frozen_result"]
         comps_out = res["comps_out"]
+        cur_df = res["df_display"].copy()
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("What-If (Hypothesis) — Group Targets")
-        st.caption("This section uses the initial snapshot only. Changing these controls will not recompute the Current Profile.")
+        st.caption("Set BTC/ETH and Stablecoins; Alts is auto-computed so the three always sum to 100%.")
 
-        with st.form(key="hypo_form", clear_on_submit=False):
-            c1, c2, c3 = st.columns(3)
-            default_btc_eth = int(comps_out['btc_eth_pct'])
-            default_stable  = int(comps_out['stable_pct'])
-            prev = st.session_state.get("hypo_targets", {"btc_eth":default_btc_eth, "stable":default_stable})
-            tgt_btc_eth = c1.slider("BTC+ETH %", 0, 100, prev.get("btc_eth", default_btc_eth), key="hypo_btc_eth")
-            tgt_stable  = c2.slider("Stablecoins %", 0, 100, prev.get("stable",  default_stable),  key="hypo_stable")
-            max_alt = max(0, 100 - tgt_btc_eth - tgt_stable)
-            tgt_alt = c3.slider("Alts %", 0, 100, int(prev.get("alt", max_alt)), key="hypo_alt")
-            st.form_submit_button("Update What-If", use_container_width=True)
-
-        total = tgt_btc_eth + tgt_stable + tgt_alt
-        if total != 100:
-            tgt_alt = max(0, 100 - tgt_btc_eth - tgt_stable)
-        st.session_state["hypo_targets"] = {"btc_eth":tgt_btc_eth, "stable":tgt_stable, "alt":tgt_alt}
-
-        hypo = pd.DataFrame({
-            "group": ["BTC/ETH","Stablecoins","Alts"],
-            "target": [tgt_btc_eth, tgt_stable, tgt_alt]
+        # Two sliders; third is computed to enforce 100%
+        col_g1, col_g2, col_g3 = st.columns(3)
+        defaults = st.session_state.get("hypo_targets", {
+            "btc_eth": int(comps_out['btc_eth_pct']),
+            "stable": int(comps_out['stable_pct']),
         })
-        fig_hypo = px.pie(hypo, names="group", values="target", hole=0.35, title="Hypothetical Allocation (by group)")
+        # keep previous choices if present
+        btc_eth_val = col_g1.slider("BTC+ETH %", 0, 100, defaults["btc_eth"], key="hypo_btc_eth_enforced")
+        stable_max = max(0, 100 - btc_eth_val)
+        stable_val = col_g2.slider("Stablecoins %", 0, stable_max, min(defaults["stable"], stable_max), key="hypo_stable_enforced")
+        alt_val = 100 - btc_eth_val - stable_val
+        col_g3.metric("Alts % (auto)", f"{alt_val}%")
+
+        st.session_state["hypo_targets"] = {"btc_eth": btc_eth_val, "stable": stable_val, "alt": alt_val}
+
+        # Render hypothetical group pie
+        hypo_group = pd.DataFrame({
+            "group": ["BTC/ETH","Stablecoins","Alts"],
+            "target": [btc_eth_val, stable_val, alt_val]
+        })
+        fig_hypo = px.pie(hypo_group, names="group", values="target", hole=0.35, title="Hypothetical Allocation (by group)")
         fig_hypo.update_layout(margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig_hypo, use_container_width=True)
 
-        # hypothetical profile score (frozen diversification/volatility components)
+        # compute hypothetical profile score using frozen diversification & vol components
         w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
-        s_btc_eth = max(0,min(1,(100.0 - tgt_btc_eth)/100.0))
-        s_alt     = max(0,min(1, tgt_alt/100.0))
-        s_stable  = max(0,min(1,(100.0 - tgt_stable)/100.0))
+        s_btc_eth = max(0,min(1,(100.0 - btc_eth_val)/100.0))
+        s_alt     = max(0,min(1, alt_val/100.0))
+        s_stable  = max(0,min(1,(100.0 - stable_val)/100.0))
         s_div     = 1.0 - min(comps_out['num_assets'], 12)/12.0
         s_vol     = max(0,min(1, comps_out['weighted_vol_24h_pct']/50.0))
-        hypo_score = float(max(0,min(100, (w_btc_eth*s_btc_eth + w_alt*s_alt + w_stable*s_stable + w_div*s_div + w_vol*s_vol)*100.0 )))
+        hypo_score_group = float(max(0,min(100, (w_btc_eth*s_btc_eth + w_alt*s_alt + w_stable*s_stable + w_div*s_div + w_vol*s_vol)*100.0 )))
 
-        st.markdown("**Hypothetical Profile Score:**")
-        st.plotly_chart(profile_gauge(hypo_score), use_container_width=True)
+        st.markdown("**Hypothetical Profile Score (group targets):**")
+        st.plotly_chart(profile_gauge(hypo_score_group), use_container_width=True)
 
-        delta = hypo_score - comps_out['risk_score']
-        delta_txt = "lower" if delta < 0 else "higher"
-        st.caption(f"Hypothetical profile is **{abs(delta):.2f}** points {delta_txt} than current ({comps_out['risk_score']:.2f}).")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # ---- Per-asset hypothetical editor ----
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.subheader("What-If (Per Asset)")
+        st.caption("Adjust each token’s target %; on submit, totals normalize to 100% and update the charts below.")
+
+        # initialize state if missing
+        if "hypo_asset_weights" not in st.session_state:
+            st.session_state["hypo_asset_weights"] = {sym: float(pct) for sym, pct in zip(cur_df["symbol"], cur_df["pct_portfolio"])}
+
+        # Build a form to avoid global reruns while editing
+        with st.form("asset_hypo_form", clear_on_submit=False):
+            cols = st.columns(3)
+            symbols = cur_df["symbol"].tolist()
+            # divide into thirds for nicer layout
+            third = (len(symbols) + 2) // 3
+            edited_weights = {}
+
+            def render_column(col, items):
+                for sym in items:
+                    default = float(st.session_state["hypo_asset_weights"].get(sym, 0.0))
+                    edited_weights[sym] = col.number_input(
+                        f"{sym} target %", min_value=0.0, max_value=100.0, value=float(round(default,2)), step=0.5, key=f"hypo_{sym}"
+                    )
+
+            render_column(cols[0], symbols[:third])
+            render_column(cols[1], symbols[third:2*third])
+            render_column(cols[2], symbols[2*third:])
+
+            submitted_assets = st.form_submit_button("Update Per-Asset What-If", use_container_width=True)
+
+        # When submitted: normalize to 100
+        if submitted_assets:
+            total_raw = sum(edited_weights.values())
+            if total_raw <= 0:
+                # keep old if user zeroed out everything
+                st.warning("Total was 0%. Keeping previous targets.")
+            else:
+                norm = {k: (v/total_raw)*100.0 for k,v in edited_weights.items()}
+                st.session_state["hypo_asset_weights"] = norm
+
+        # Display current (possibly normalized) weights and charts
+        weights = st.session_state["hypo_asset_weights"]
+        # Ensure we include only current symbols (in case user changed inputs earlier)
+        weights = {sym: weights.get(sym, 0.0) for sym in symbols}
+        # Make a dataframe for the pie chart
+        df_asset_hypo = pd.DataFrame({
+            "symbol": list(weights.keys()),
+            "target_pct": [float(v) for v in weights.values()]
+        }).sort_values("target_pct", ascending=False)
+
+        # Show sum & gentle hint
+        total_pct = df_asset_hypo["target_pct"].sum()
+        col_sum1, col_sum2 = st.columns([3,1])
+        col_sum1.caption("Tip: Enter rough numbers; we normalize to 100% on submit.")
+        col_sum2.metric("Sum of targets", f"{total_pct:.2f}%")
+
+        # Pie by asset
+        fig_asset = px.pie(df_asset_hypo, names="symbol", values="target_pct", hole=0.35, title="Hypothetical Allocation (by asset)")
+        fig_asset.update_layout(margin=dict(l=0,r=0,t=30,b=0))
+        st.plotly_chart(fig_asset, use_container_width=True)
+
+        # Compute hypothetical group score from per-asset targets for consistency
+        # Map each asset to BTC/ETH / Stable / Alt
+        key_col = "folded_id" if "folded_id" in cur_df.columns else "name"
+        # We'll derive groups from symbol->id via current df
+        symbol_to_id_map = dict(zip(cur_df["symbol"], cur_df.get("name", cur_df["symbol"])))
+        # For grouping, better to use 'name'->id where possible; but we only need group totals:
+        btc_eth_symbols = set(cur_df.loc[cur_df["name"].isin(["Bitcoin","Ethereum"]), "symbol"].tolist())
+        stable_symbols = set(cur_df.loc[cur_df["name"].str.lower().str.replace(" ","-").isin(STABLECOIN_IDS), "symbol"].tolist())
+
+        btc_eth_target = sum(df_asset_hypo.loc[df_asset_hypo["symbol"].isin(btc_eth_symbols), "target_pct"])
+        stable_target  = sum(df_asset_hypo.loc[df_asset_hypo["symbol"].isin(stable_symbols), "target_pct"])
+        alt_target     = max(0.0, 100.0 - btc_eth_target - stable_target)
+
+        # Score using per-asset-derived groups
+        s_btc_eth2 = max(0,min(1,(100.0 - btc_eth_target)/100.0))
+        s_alt2     = max(0,min(1, alt_target/100.0))
+        s_stable2  = max(0,min(1,(100.0 - stable_target)/100.0))
+        w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
+        s_div2    = 1.0 - min(comps_out['num_assets'], 12)/12.0
+        s_vol2    = max(0,min(1, comps_out['weighted_vol_24h_pct']/50.0))
+        hypo_score_assets = float(max(0,min(100, (w_btc_eth*s_btc_eth2 + w_alt*s_alt2 + w_stable*s_stable2 + w_div*s_div2 + w_vol*s_vol2)*100.0 )))
+
+        st.markdown("**Hypothetical Profile Score (per-asset targets):**")
+        st.plotly_chart(profile_gauge(hypo_score_assets), use_container_width=True)
+
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ===== METHODOLOGY (reference) =====
@@ -696,10 +794,7 @@ Profile type labels:
 To make BTC/ETH share more meaningful, we group certain derivatives under their base asset (e.g., <b>wBTC → BTC</b>, <b>stETH/wETH/reth/cbeth → ETH</b>). This affects grouping only, not raw holdings.
 
 ### What-If section
-The sliders set target group % (BTC/ETH, Stablecoins, Alts). We recompute the score using these targets plus your current diversification and 24h proxy (we do not change your actual holdings).
-
-### Data & Caveats
-Prices and 24h changes are from CoinGecko at run time. The 24h move is a coarse proxy; it does not replace full historical volatility modeling. Stablecoin lists and mappings are curated examples and not exhaustive.
+You can adjust **group targets** (BTC/ETH & Stablecoins; Alts auto-fills to 100%) or edit **per-asset targets**. Per-asset values are normalized to 100% on submit. These simulations keep your current diversification count and 24h proxy.
 </div>
             """,
             unsafe_allow_html=True,
