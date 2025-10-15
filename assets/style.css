@@ -1,9 +1,47 @@
-
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;800&family=Poppins:wght@400;600;800&display=swap');
-:root{--bg:#0A0C11;--glass:#0F131Ccc;--accent:#00E3B2;--gold:#E7B622;--text:#EAF2FF;--muted:#8FA2B8;}
-html,body,[data-testid="stAppViewContainer"]{background:radial-gradient(1000px 600px at 10% 10%, rgba(0,227,178,0.05), transparent 60%),radial-gradient(900px 700px at 90% 10%, rgba(231,182,34,0.06), transparent 60%),var(--bg)!important;color:var(--text)!important;font-family:'Poppins','Montserrat',system-ui;}
-.hero{text-align:center;padding:30px 10px 8px}.hero .logo{width:128px;filter:drop-shadow(0 0 18px rgba(0,227,178,0.35))}.hero h1{margin:10px 0 0;font-weight:800;color:var(--gold)}.hero h2{margin:0;font-weight:700;color:var(--text);opacity:.96}.hero p{color:var(--muted)}
-.card{padding:16px;border-radius:16px;margin:14px 0;border:1px solid rgba(255,255,255,.08);background:linear-gradient(180deg,rgba(15,19,28,.78),rgba(15,19,28,.5));backdrop-filter:blur(8px);box-shadow:0 2px 24px rgba(0,0,0,.38),inset 0 0 0 1px rgba(255,255,255,.05)}
-.center{text-align:center}
-.stButton>button{border-radius:12px;border:1px solid rgba(0,227,178,.35)!important;box-shadow:0 0 12px rgba(0,227,178,.22)!important;background:linear-gradient(180deg,rgba(0,227,178,.22),rgba(0,227,178,.08));color:var(--text)}
-[data-testid="stDataFrame"]{border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.06)}
+
+:root{
+  --bg:#090d12;
+  --glass:#0d141dcc;
+  --accent:#00E3B2;
+  --gold:#E7B622;
+  --text:#EAF2FF;
+  --muted:#9AB0C5;
+}
+
+html, body, [data-testid="stAppViewContainer"]{
+  background:
+    radial-gradient(1200px 800px at 10% 0%, rgba(0,227,178,0.08), transparent 60%),
+    radial-gradient(1200px 900px at 95% 0%, rgba(231,182,34,0.08), transparent 60%),
+    var(--bg) !important;
+  color: var(--text) !important;
+  font-family: 'Poppins','Montserrat',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+}
+
+.hero{ text-align:center; padding: 36px 10px 16px; }
+.hero .logo{ width:120px; filter: drop-shadow(0 0 18px rgba(0,227,178,0.4)); }
+.hero h1{ margin:10px 0 0; font-weight:800; letter-spacing:.4px; color:var(--gold); }
+.hero h2{ margin:0; font-weight:700; color:#fff; opacity:.92; }
+.hero p{ color:var(--muted); margin-top:6px; }
+
+.card{
+  padding:18px; border-radius:16px; margin: 14px 0;
+  background: linear-gradient(180deg, rgba(13,20,29,0.9), rgba(13,20,29,0.6));
+  border: 1px solid rgba(255,255,255,0.07);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 28px rgba(0,0,0,.45), inset 0 0 0 1px rgba(255,255,255,.03);
+}
+
+.stButton>button{
+  border-radius:12px; padding:10px 14px; font-weight:700;
+  border:1px solid rgba(0,227,178,0.35)!important;
+  box-shadow: 0 0 14px rgba(0,227,178,0.22)!important;
+  background: linear-gradient(180deg, rgba(0,227,178,0.22), rgba(0,227,178,0.08));
+  color: var(--text);
+}
+
+[data-testid="stDataFrame"]{
+  border-radius: 12px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,0.06);
+}
