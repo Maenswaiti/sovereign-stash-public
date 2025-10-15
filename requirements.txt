@@ -2,6 +2,7 @@ streamlit>=1.32
 pandas
 requests
 plotly
+kaleido
 Pillow
 openpyxl
 reportlab
