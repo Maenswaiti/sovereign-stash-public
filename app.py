@@ -1,4 +1,4 @@
-# --- app.py (Sovereign Stash — Crypto Risk Radar, public no-auth) ---
+# --- app.py (Sovereign Stash — Crypto Portfolio Navigator, public no-auth) ---
 import os, json, re, hashlib
 from datetime import datetime
 from typing import Dict, List, Tuple
@@ -12,7 +12,7 @@ import plotly.io as pio
 
 from utils import ingest
 
-st.set_page_config(page_title="Sovereign Stash – Crypto Risk Radar", page_icon="🛰️", layout="wide")
+st.set_page_config(page_title="Sovereign Stash – Crypto Portfolio Navigator", page_icon="🛰️", layout="wide")
 
 # -------- OpenAI (v1 client) --------
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY", None)
@@ -22,7 +22,7 @@ try:
 except Exception:
     client = None
 
-# -------- Data & risk constants --------
+# -------- Data & profile constants --------
 COINGECKO_BASE = "https://api.coingecko.com/api/v3"
 STABLECOIN_IDS = {"tether","usd-coin","binance-usd","dai","true-usd","usdd","frax"}
 STABLECOIN_SYMBOL_HINTS = {"USDT":"tether","USDC":"usd-coin","BUSD":"binance-usd","DAI":"dai","TUSD":"true-usd"}
@@ -49,24 +49,64 @@ DISCLAIMER_SHORT = (
     "Crypto assets are volatile and you can lose money."
 )
 
-# -------- Styling (lighter theme) --------
+# -------- Styling (lighter theme + readable buttons + uniform fonts) --------
 def inject_styles():
-    # load external css if present
+    # Load external CSS if present
     try:
         with open("assets/style.css","r",encoding="utf-8") as f:
             st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
     except Exception:
         pass
-    # lighten background & surfaces
+
+    # Uniform typography + improved buttons + headings
     st.markdown("""
     <style>
-      :root{ --bg:#0e1420; --glass:#121a28cc; --text:#F2F6FF; --muted:#B8C6D9; }
-      .card{ background:linear-gradient(180deg, rgba(18,26,40,0.88), rgba(18,26,40,0.65));
-             border:1px solid rgba(255,255,255,.10); border-radius:16px; padding:18px; margin:14px 0; }
+      @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap');
+      html, body, [data-testid="stAppViewContainer"]{
+        font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        background: #0f172a;  /* lighter navy */
+      }
+      /* Cards */
+      .card{
+        background: linear-gradient(180deg, rgba(18,26,40,0.88), rgba(18,26,40,0.65));
+        border: 1px solid rgba(255,255,255,.10);
+        border-radius: 16px; padding: 18px; margin: 14px 0;
+      }
+      /* Headings */
+      h1, h2, .stMarkdown h2, .stMarkdown h3{
+        color: #e2e8f0;
+      }
+      .hero h1 { font-size: 38px; font-weight: 800; margin: 8px 0 0; }
+      .hero h2 { font-size: 22px; font-weight: 700; opacity: .95; margin: 0; }
+      .stMarkdown h2 { font-size: 22px; font-weight: 700; }
+      .stMarkdown h3 { font-size: 18px; font-weight: 600; }
+      /* Buttons (action + download) */
+      .stButton>button, .stDownloadButton>button{
+        background: #0ea5e9 !important; /* sky-500 */
+        color: #ffffff !important;
+        border: 0 !important;
+        border-radius: 12px !important;
+        padding: 10px 14px !important;
+        font-weight: 700 !important;
+        box-shadow: 0 6px 16px rgba(14,165,233,0.35) !important;
+      }
+      .stButton>button:hover, .stDownloadButton>button:hover{
+        background: #0284c7 !important; /* sky-600 */
+      }
+      /* File uploader label */
+      label[for^="stFileUpload"] { color: #e2e8f0 !important; font-weight: 600; }
+      /* Dataframe chrome */
+      [data-testid="stDataFrame"]{
+        border-radius: 12px; overflow: hidden;
+        border:1px solid rgba(255,255,255,0.10);
+      }
+      .hero{ text-align: center; padding: 36px 10px 16px; }
+      .hero .logo{ width: 120px; filter: drop-shadow(0 0 14px rgba(14,165,233,0.45)); }
+      .hero p { color: #93a3b8; }
     </style>
     """, unsafe_allow_html=True)
 
-def set_brand_plotly_lighter():
+def set_plotly_theme():
     pio.templates["ss_light"] = go.layout.Template(
         layout=go.Layout(
             paper_bgcolor="rgba(0,0,0,0)",
@@ -103,16 +143,16 @@ def build_symbol_to_id_map():
 def symbol_to_id(symbol: str, s2id_map: Dict[str,str]) -> str:
     if not symbol: return None
     s = symbol.strip().lower()
-    if s.upper() in STABLECOIN_SYMBOL_HINTS:  # stable hints (legacy)
+    if s.upper() in STABLECOIN_SYMBOL_HINTS:
         return STABLECOIN_SYMBOL_HINTS[s.upper()]
-    if s in PREFERRED_COINS:                  # canonical majors
+    if s in PREFERRED_COINS:
         return PREFERRED_COINS[s]
-    if s in s2id_map:                          # exact
+    if s in s2id_map:
         return s2id_map[s]
-    s_clean = re.sub(r"[^a-z0-9\\-]", "", s)   # remove separators
+    s_clean = re.sub(r"[^a-z0-9\\-]", "", s)
     if s_clean in s2id_map:
         return s2id_map[s_clean]
-    if s in ("btc","xbt"):                     # final guard
+    if s in ("btc","xbt"):
         return "bitcoin"
     return s
 
@@ -128,8 +168,9 @@ def fetch_market_data(ids: List[str]):
         out.extend(r.json())
     return out
 
-# -------- Scoring & insights --------
-def calculate_risk_score(df: pd.DataFrame):
+# -------- Scoring (internally 'risk_score') & insights --------
+def calculate_profile_score(df: pd.DataFrame):
+    """Return (score, components) where score=0..100. Internally uses 'risk' semantics, but UI calls it 'profile'."""
     total = df["value_usd"].sum()
     if total <= 0: return 0.0, {}
     key_col = "folded_id" if "folded_id" in df.columns else "id"
@@ -171,24 +212,28 @@ def portfolio_insights(df_display: pd.DataFrame, comps: Dict) -> str:
     return "• " + "\n• ".join(lines)
 
 def generate_ai_summary(metrics: Dict, top_assets: List[Tuple[str,float]]) -> str:
+    """Robust summary: uses OpenAI if available; gracefully falls back on rule-based text."""
     fallback = [
-        f"Risk Score: {metrics.get('risk_score','N/A')} / 100",
+        f"Profile Score: {metrics.get('risk_score','N/A')} / 100",
         f"BTC+ETH: {metrics.get('btc_eth_pct','N/A')}%",
         f"Stablecoins: {metrics.get('stable_pct','N/A')}%",
         f"Alts: {metrics.get('alt_pct','N/A')}%",
-        f"Weighted 24h vol: {metrics.get('weighted_vol_24h_pct','N/A')}%",
+        f"Weighted 24h move (volatility proxy): {metrics.get('weighted_vol_24h_pct','N/A')}%",
         "", "Top holdings:"
     ]
-    for t,p in top_assets[:5]: fallback.append(f"- {t}: {round(p,2)}%")
-    fallback.append("\nAdd OPENAI_API_KEY in Streamlit Secrets to enable natural language insights.")
+    for t,p in top_assets[:5]:
+        fallback.append(f"- {t}: {round(p,2)}%")
     fallback_text = "\n".join(fallback)
-    if not client: return fallback_text
+
+    if not client:
+        return fallback_text + "\n\n(Add OPENAI_API_KEY in Streamlit Secrets to enable natural-language notes.)"
+
     prompt = (
-        "You are a concise crypto investment explainer for a general audience. "
-        "Summarize the current risk and provide two practical, non-financial-advice suggestions.\n\n"
+        "You are a concise crypto portfolio explainer for a general audience. "
+        "Summarize the current portfolio profile and provide two practical, non-financial-advice observations.\n\n"
         "Metrics:\n" + json.dumps(metrics, indent=2) + "\nTop holdings:\n" +
         "\n".join([f"- {t}: {round(p,2)}%" for t,p in top_assets[:8]]) +
-        "\n\nOutput: short summary + a one-word Risk label + two bullet suggestions."
+        "\n\nOutput: short summary + a one-word Profile label + two bullet observations."
     )
     try:
         resp = client.chat.completions.create(
@@ -199,9 +244,12 @@ def generate_ai_summary(metrics: Dict, top_assets: List[Tuple[str,float]]) -> st
         )
         return resp.choices[0].message.content.strip()
     except Exception as e:
-        return f"AI summary failed: {e}"
+        msg = str(e)
+        if ("insufficient_quota" in msg) or ("You exceeded your current quota" in msg) or ("code: 429" in msg):
+            return "AI temporarily unavailable (quota exceeded).\n\n" + fallback_text
+        return f"AI notes unavailable: {e}\n\n" + fallback_text
 
-def risk_gauge(score: float):
+def profile_gauge(score: float):
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=score,
@@ -226,16 +274,16 @@ from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-def build_pdf_report(total_value, risk_score, pf_type, comps_out, ai_summary, top_table):
+def build_pdf_report(total_value, profile_score, pf_type, comps_out, ai_summary, top_table):
     buf = BytesIO(); doc = SimpleDocTemplate(buf, pagesize=LETTER, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
     styles = getSampleStyleSheet(); story = []
-    story += [Paragraph("<b>Sovereign Stash — Crypto Risk Radar</b>", styles['Title']), Spacer(1,6)]
+    story += [Paragraph("<b>Sovereign Stash — Crypto Portfolio Navigator</b>", styles['Title']), Spacer(1,6)]
     story += [Paragraph(f"Generated: {datetime.utcnow().isoformat()}Z", styles['Normal']), Spacer(1,8)]
     story += [Paragraph(f"<b>Total Value:</b> ${total_value:,.2f}", styles['Normal'])]
-    story += [Paragraph(f"<b>Risk Score:</b> {risk_score:.2f} / 100 ({pf_type})", styles['Normal']), Spacer(1,8)]
-    km = [["BTC+ETH", f"{comps_out['btc_eth_pct']}%"],["Stablecoins", f"{comps_out['stable_pct']}%"],["Altcoins", f"{comps_out['alt_pct']}%"],
-          ["Weighted 24h vol", f"{comps_out['weighted_vol_24h_pct']}%"],["Unique assets", f"{comps_out['num_assets']}"]]
-    tbl = Table([["Metric","Value"]]+km, hAlign='LEFT', colWidths=[150,200])
+    story += [Paragraph(f"<b>Profile Score:</b> {profile_score:.2f} / 100 ({pf_type})", styles['Normal']), Spacer(1,8)]
+    km = [["BTC+ETH", f"{comps_out['btc_eth_pct']}%"],["Stablecoins", f"{comps_out['stable_pct']}%"],["Alts", f"{comps_out['alt_pct']}%"],
+          ["Weighted 24h move (proxy)", f"{comps_out['weighted_vol_24h_pct']}%"],["Unique assets", f"{comps_out['num_assets']}"]]
+    tbl = Table([["Metric","Value"]]+km, hAlign='LEFT', colWidths=[180,220])
     tbl.setStyle(TableStyle([
         ('BACKGROUND',(0,0),(1,0), colors.HexColor('#0A6D62')),
         ('TEXTCOLOR',(0,0),(1,0), colors.whitesmoke),
@@ -245,7 +293,7 @@ def build_pdf_report(total_value, risk_score, pf_type, comps_out, ai_summary, to
     ]))
     story += [tbl, Spacer(1,10)]
     if top_table:
-        t = Table([["Symbol","% Portfolio"]] + top_table[:10], hAlign='LEFT', colWidths=[150,200])
+        t = Table([["Symbol","% Portfolio"]] + top_table[:10], hAlign='LEFT', colWidths=[180,220])
         t.setStyle(TableStyle([
             ('BACKGROUND',(0,0),(1,0), colors.HexColor('#E7B622')),
             ('TEXTCOLOR',(0,0),(1,0), colors.black),
@@ -254,21 +302,16 @@ def build_pdf_report(total_value, risk_score, pf_type, comps_out, ai_summary, to
             ('BOX',(0,0),(-1,-1),0.5, colors.grey)
         ]))
         story += [Paragraph("<b>Top Holdings</b>", styles['Heading3']), t, Spacer(1,10)]
-    story += [Paragraph("<b>AI Summary</b>", styles['Heading3']), Paragraph(ai_summary.replace("\n","<br/>"), styles['Normal']), Spacer(1,10)]
+    story += [Paragraph("<b>AI Portfolio Notes</b>", styles['Heading3']), Paragraph(ai_summary.replace("\n","<br/>"), styles['Normal']), Spacer(1,10)]
     story += [Paragraph("<font size=9>"+DISCLAIMER_SHORT+"</font>", styles['Normal'])]
     doc.build(story); pdf = buf.getvalue(); buf.close(); return pdf
 
 # ========= SESSION UTILITIES =========
 def compute_inputs_hash(text: str, imported_rows: List[Tuple[str,float]], fold: bool) -> str:
-    payload = json.dumps({
-        "text": text.strip(),
-        "imported": imported_rows,
-        "fold": fold
-    }, sort_keys=True)
+    payload = json.dumps({"text": text.strip(), "imported": imported_rows, "fold": fold}, sort_keys=True)
     return hashlib.md5(payload.encode("utf-8")).hexdigest()
 
 def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
-    # holdings = list of (token, qty)
     s2id = build_symbol_to_id_map()
     ids=set(); rows=[]
     for token, qty in holdings:
@@ -287,17 +330,15 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
                          "quantity":r["quantity"],"price_usd":price,"value_usd":val,"price_change_percentage_24h":change24})
     df = pd.DataFrame(enriched)
     df["value_usd"]=df["value_usd"].astype(float)
-    if fold_derivs:
-        df['folded_id'] = df['id'].apply(lambda x: FOLD_TO_BASE.get((x or '').lower(), x))
-    else:
-        df['folded_id'] = df['id']
+    if fold_derivs: df['folded_id'] = df['id'].apply(lambda x: FOLD_TO_BASE.get((x or '').lower(), x))
+    else:           df['folded_id'] = df['id']
     total_value = float(df["value_usd"].sum())
     if total_value <= 0: return None
     df["pct_portfolio"] = df["value_usd"]/total_value*100.0
     df_display = df[["symbol","name","quantity","price_usd","value_usd","pct_portfolio","price_change_percentage_24h"]].sort_values("value_usd", ascending=False)
-    risk_score, comps = calculate_risk_score(df)
+    profile_score, comps = calculate_profile_score(df)
     comps_out = {
-        "risk_score": round(risk_score,2),
+        "risk_score": round(profile_score,2),  # keep key name for reuse
         "btc_eth_pct": comps.get("btc_eth_pct"),
         "stable_pct": comps.get("stable_pct"),
         "alt_pct": comps.get("alt_pct"),
@@ -307,12 +348,12 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
     metrics_for_ai = dict(comps_out); metrics_for_ai["total_value_usd"]=round(total_value,2)
     top_assets = list(zip(df_display["symbol"], df_display["pct_portfolio"]))
     pf_type = "Conservative"
-    if risk_score >= 66: pf_type = "Aggressive"
-    elif risk_score >= 34: pf_type = "Balanced"
+    if profile_score >= 66: pf_type = "Growth-oriented"
+    elif profile_score >= 34: pf_type = "Balanced"
     return {
         "df_display": df_display,
         "total_value": total_value,
-        "risk_score": risk_score,
+        "risk_score": profile_score,
         "comps_out": comps_out,
         "metrics_for_ai": metrics_for_ai,
         "top_assets": top_assets,
@@ -322,14 +363,14 @@ def recompute_analysis(holdings: List[Tuple[str,float]], fold_derivs: bool):
 # -------- App --------
 def main():
     inject_styles()
-    set_brand_plotly_lighter()
+    set_plotly_theme()
 
     st.markdown("""
     <div class="hero">
       <img src="assets/logo_ss.png" class="logo" />
       <h1>Sovereign Stash</h1>
-      <h2>Crypto Risk Radar</h2>
-      <p>No login. No data saved. Paste or import your holdings and get a live risk view.</p>
+      <h2>Crypto Portfolio Navigator</h2>
+      <p>No login. No data saved. Paste or import your holdings for a live portfolio profile view.</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -365,13 +406,12 @@ def main():
             else: st.warning("No rows detected. Use columns Token / Amount or a known exchange export.")
 
     with st.expander("Advanced normalization & mapping"):
-        st.caption("Optionally fold well-known derivatives into base assets for risk grouping (e.g., wBTC→BTC, stETH→ETH).")
-        fold_derivs = st.checkbox("Fold derivatives into base assets for risk grouping", value=st.session_state.get("fold_derivs", True), key="fold_checkbox")
+        st.caption("Optionally fold well-known derivatives into base assets for profile grouping (e.g., wBTC→BTC, stETH→ETH).")
+        fold_derivs = st.checkbox("Fold derivatives into base assets for grouping", value=st.session_state.get("fold_derivs", True), key="fold_checkbox")
 
-    col_btn1, col_btn2 = st.columns([1,1])
-    analyze_clicked = col_btn1.button("Analyze Portfolio", use_container_width=True, type="primary")
-    reset_clicked   = col_btn2.button("Reset Analysis", use_container_width=True)
-
+    c1, c2 = st.columns([1,1])
+    analyze_clicked = c1.button("Analyze Portfolio", use_container_width=True, type="primary")
+    reset_clicked   = c2.button("Reset Analysis", use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     # helper: parse manual text into (token, qty)
@@ -391,13 +431,11 @@ def main():
             items.append((token, qty))
         return items
 
-    # Reset clears frozen state
     if reset_clicked:
-        for k in ["frozen_hash","frozen_holdings","frozen_result","last_text","fold_derivs"]:
+        for k in ["frozen_hash","frozen_holdings","frozen_result","last_text","fold_derivs","hypo_targets"]:
             st.session_state.pop(k, None)
         st.experimental_rerun()
 
-    # If Analyze clicked -> recompute and freeze
     if analyze_clicked:
         manual_rows = parse_portfolio(portfolio_text)
         all_rows = manual_rows + imported_rows
@@ -415,32 +453,31 @@ def main():
         st.session_state["last_text"] = portfolio_text
         st.session_state["fold_derivs"] = fold_derivs
 
-    # If we have no frozen analysis yet, stop here
     if "frozen_result" not in st.session_state:
-        st.info("Enter tokens and click **Analyze Portfolio** to see results.")
+        st.info("Enter tokens and click **Analyze Portfolio** to see your portfolio profile.")
         st.stop()
 
     # ========= TABS: Current vs Hypothesis =========
-    tab_current, tab_hypo = st.tabs(["📊 Current Analysis", "🧪 Hypothesis (What-If)"])
+    tab_current, tab_hypo = st.tabs(["📊 Current Profile", "🧪 What-If (Hypothesis)"])
 
-    # -------- CURRENT ANALYSIS (reads frozen data; never recomputes on UI tweaks) --------
+    # -------- CURRENT PROFILE (frozen; no recompute on UI tweaks) --------
     with tab_current:
         res = st.session_state["frozen_result"]
         df_display = res["df_display"]
         total_value = res["total_value"]
-        risk_score = res["risk_score"]
+        profile_score = res["risk_score"]   # number only; UI never says "risk"
         comps_out = res["comps_out"]
         metrics_for_ai = res["metrics_for_ai"]
         top_assets = res["top_assets"]
         pf_type = res["pf_type"]
 
-        ai_summary = generate_ai_summary(metrics_for_ai, top_assets)
+        ai_notes = generate_ai_summary(metrics_for_ai, top_assets)
 
         left, right = st.columns([2,1])
 
         with left:
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("2) Live Portfolio Overview")
+            st.subheader("2) Portfolio Overview")
             st.dataframe(
                 df_display.style.format({
                     "price_usd":"${:,.4f}","value_usd":"${:,.2f}",
@@ -451,7 +488,7 @@ def main():
             st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("Allocation")
+            st.subheader("Allocation by Asset")
             fig_alloc = px.pie(df_display, names="symbol", values="pct_portfolio", hole=0.35)
             fig_alloc.update_traces(textposition='inside', textinfo='percent+label')
             fig_alloc.update_layout(margin=dict(l=0,r=0,t=20,b=0))
@@ -483,85 +520,82 @@ def main():
 
         with right:
             st.markdown('<div class="card center">', unsafe_allow_html=True)
-            st.subheader("Risk Gauge")
-            st.plotly_chart(risk_gauge(risk_score), use_container_width=True)
-            st.markdown(f"**Profile:** {pf_type}")
+            st.subheader("Profile Gauge")
+            st.plotly_chart(profile_gauge(profile_score), use_container_width=True)
+            st.markdown(f"**Profile Type:** {pf_type}")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            st.markdown('<div class="card">', unsafe_allow_html=True)
-            st.subheader("AI Summary")
-            st.text_area("AI-generated risk insights", value=ai_summary, height=210)
-            st.markdown('</div>', unsafe_allow_html=True)
+            if client:  # show AI card only when key is set
+                st.markdown('<div class="card">', unsafe_allow_html=True)
+                st.subheader("AI Portfolio Notes")
+                st.text_area("AI-generated notes", value=ai_notes, height=210)
+                st.markdown('</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="card">', unsafe_allow_html=True)
             st.subheader("Download Report")
             html = f"""<html><head><meta charset='utf-8'><title>Sovereign Stash Report</title></head>
             <body style='font-family:Arial;background:#ffffff;color:#0f172a;'>
-            <h2>Sovereign Stash — Crypto Risk Radar</h2>
+            <h2>Sovereign Stash — Crypto Portfolio Navigator</h2>
             <p>Generated: {datetime.utcnow().isoformat()}Z</p>
             <p>Total Value: ${total_value:,.2f}</p>
-            <p>Risk Score: {risk_score:.2f} / 100 ({pf_type})</p>
+            <p>Profile Score: {profile_score:.2f} / 100 ({pf_type})</p>
             <h3>Key Metrics</h3>
             <ul>
               <li>BTC+ETH: {comps_out['btc_eth_pct']}%</li>
               <li>Stablecoins: {comps_out['stable_pct']}%</li>
-              <li>Altcoins: {comps_out['alt_pct']}%</li>
-              <li>Weighted 24h volatility: {comps_out['weighted_vol_24h_pct']}%</li>
+              <li>Alts: {comps_out['alt_pct']}%</li>
+              <li>Weighted 24h move (proxy): {comps_out['weighted_vol_24h_pct']}%</li>
               <li>Unique assets: {comps_out['num_assets']}</li>
             </ul>
-            <h3>AI Summary</h3>
-            <pre style="white-space:pre-wrap;">{generate_ai_summary(metrics_for_ai, top_assets)}</pre>
+            <h3>AI Portfolio Notes</h3>
+            <pre style="white-space:pre-wrap;">{ai_notes}</pre>
             <hr><p style='font-size:12px;opacity:0.8'>{DISCLAIMER_SHORT}</p>
             </body></html>"""
             pdf = build_pdf_report(
-                total_value, risk_score, pf_type, comps_out,
-                generate_ai_summary(metrics_for_ai, top_assets),
+                total_value, profile_score, pf_type, comps_out,
+                ai_notes,
                 list(zip(df_display['symbol'].tolist(), [f"{v:.2f}%" for v in df_display['pct_portfolio'].tolist()]))
             )
             st.download_button("Download PDF (1 page)", data=pdf, file_name="sovereign_stash_report.pdf", mime="application/pdf")
             st.download_button("Download HTML (print to PDF)", data=html, file_name="sovereign_stash_report.html", mime="text/html")
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # -------- HYPOTHESIS (isolated; no recompute of current) --------
+    # -------- WHAT-IF / HYPOTHESIS (isolated; no recompute of current) --------
     with tab_hypo:
         res = st.session_state["frozen_result"]  # read-only snapshot
         comps_out = res["comps_out"]
 
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Rebalancing Hypothesis (What-If) — by Group")
-        st.caption("This section uses the initial snapshot only. Changing these controls will not recompute the Current Analysis.")
+        st.subheader("What-If (Hypothesis) — Group Targets")
+        st.caption("This section uses the initial snapshot only. Changing these controls will not recompute the Current Profile.")
 
-        # Use a form so slider changes don't trigger live reruns; update only when "Update" is clicked
+        # Form so slider changes don't trigger global reruns; updates only on submit
         with st.form(key="hypo_form", clear_on_submit=False):
             c1, c2, c3 = st.columns(3)
             default_btc_eth = int(comps_out['btc_eth_pct'])
             default_stable  = int(comps_out['stable_pct'])
-            # read previous selections from session_state to preserve between submits
             prev = st.session_state.get("hypo_targets", {"btc_eth":default_btc_eth, "stable":default_stable})
             tgt_btc_eth = c1.slider("BTC+ETH %", 0, 100, prev.get("btc_eth", default_btc_eth), key="hypo_btc_eth")
             tgt_stable  = c2.slider("Stablecoins %", 0, 100, prev.get("stable",  default_stable),  key="hypo_stable")
             max_alt = max(0, 100 - tgt_btc_eth - tgt_stable)
-            tgt_alt = c3.slider("Altcoins %", 0, 100, int(prev.get("alt", max_alt)), key="hypo_alt")
+            tgt_alt = c3.slider("Alts %", 0, 100, int(prev.get("alt", max_alt)), key="hypo_alt")
 
-            submitted = st.form_submit_button("Update hypothesis", use_container_width=True)
+            submitted = st.form_submit_button("Update What-If", use_container_width=True)
 
-        # Normalize to 100 and persist the last chosen targets
         total = tgt_btc_eth + tgt_stable + tgt_alt
         if total != 100:
-            # adjust alt to make sum 100
             tgt_alt = max(0, 100 - tgt_btc_eth - tgt_stable)
         st.session_state["hypo_targets"] = {"btc_eth":tgt_btc_eth, "stable":tgt_stable, "alt":tgt_alt}
 
-        # Render hypothesis visuals (independent of current)
         hypo = pd.DataFrame({
-            "group": ["BTC/ETH","Stablecoins","Altcoins"],
+            "group": ["BTC/ETH","Stablecoins","Alts"],
             "target": [tgt_btc_eth, tgt_stable, tgt_alt]
         })
         fig_hypo = px.pie(hypo, names="group", values="target", hole=0.35, title="Hypothetical Allocation (by group)")
         fig_hypo.update_layout(margin=dict(l=0,r=0,t=30,b=0))
         st.plotly_chart(fig_hypo, use_container_width=True)
 
-        # compute hypothetical risk using frozen diversification & vol only
+        # compute hypothetical profile score using frozen diversification & vol only
         w_btc_eth=0.30; w_alt=0.30; w_stable=0.20; w_div=0.10; w_vol=0.10
         s_btc_eth = max(0,min(1,(100.0 - tgt_btc_eth)/100.0))
         s_alt     = max(0,min(1, tgt_alt/100.0))
@@ -570,12 +604,12 @@ def main():
         s_vol     = max(0,min(1, comps_out['weighted_vol_24h_pct']/50.0))
         hypo_score = float(max(0,min(100, (w_btc_eth*s_btc_eth + w_alt*s_alt + w_stable*s_stable + w_div*s_div + w_vol*s_vol)*100.0 )))
 
-        st.markdown("**Hypothetical Risk Score:**")
-        st.plotly_chart(risk_gauge(hypo_score), use_container_width=True)
+        st.markdown("**Hypothetical Profile Score:**")
+        st.plotly_chart(profile_gauge(hypo_score), use_container_width=True)
 
         delta = hypo_score - comps_out['risk_score']
         delta_txt = "lower" if delta < 0 else "higher"
-        st.caption(f"Result: hypothetical risk is **{abs(delta):.2f}** points {delta_txt} than your current score ({comps_out['risk_score']:.2f}).")
+        st.caption(f"Result: hypothetical profile is **{abs(delta):.2f}** points {delta_txt} than your current profile ({comps_out['risk_score']:.2f}).")
         st.markdown('</div>', unsafe_allow_html=True)
 
 if __name__ == "__main__":
